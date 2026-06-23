@@ -8,6 +8,7 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,4 +25,9 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MAX_SEARCH_URLS_PER_STORE: "140"
+          MAX_PAGES_PER_QUERY: "3"
+          MAX_SITEMAP_URLS_PER_STORE: "250"
+          MAX_DETAIL_URLS_PER_STORE: "300"
+          REQUEST_DELAY_SECONDS: "0.4"
         run: python scraper/scraper.py
