@@ -42,7 +42,7 @@ a {
 .gh-panel {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 .gh-button {
@@ -51,7 +51,7 @@ a {
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(31, 35, 40, 0.15);
-  border-radius: 6px;
+  border-radius: 0;
   background: #f6f8fa;
   color: var(--text);
   padding: 6px 12px;
@@ -75,7 +75,7 @@ a {
 .gh-input {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   background: #ffffff;
   padding: 10px 12px;
   color: var(--text);
@@ -90,7 +90,7 @@ a {
 .gh-label {
   display: inline-flex;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 0;
   background: #f6f8fa;
   color: var(--muted);
   padding: 2px 8px;

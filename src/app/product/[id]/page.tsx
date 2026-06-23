@@ -120,7 +120,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                   <tr key={listing.id} className={index === 0 ? "bg-[#dafbe1]" : "bg-white"}>
                     <td className="px-6 py-4 font-semibold text-[#24292f]">
                       <div className="flex items-center gap-3">
-                        <span className="rounded border border-[#d0d7de] bg-[#f6f8fa] px-2 py-1 text-xs text-[#57606a]">#{index + 1}</span>
+                        <span className="border border-[#d0d7de] bg-[#f6f8fa] px-2 py-1 text-xs text-[#57606a]">#{index + 1}</span>
                         {listing.store_name}
                       </div>
                     </td>

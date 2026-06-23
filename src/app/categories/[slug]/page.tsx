@@ -99,7 +99,7 @@ export default async function CategoryDetailPage({ params }: CategoryPageProps) 
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#57606a]">En düşük fiyat</p>
                 <p className="text-2xl font-semibold text-[#1a7f37]">{formatTRY(product.lowestPrice)}</p>
               </div>
-              <span className="rounded border border-[#d0d7de] bg-[#f6f8fa] px-2 py-1 text-xs font-semibold text-[#57606a]">
+              <span className="border border-[#d0d7de] bg-[#f6f8fa] px-2 py-1 text-xs font-semibold text-[#57606a]">
                 {product.listingCount} teklif
               </span>
             </div>

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
-import { categories, categoryIconMap } from "@/lib/categories";
+import { categories } from "@/lib/categories";
 
 export const metadata: Metadata = {
   title: "Kategoriler",
@@ -10,31 +9,23 @@ export const metadata: Metadata = {
 
 export default function CategoriesPage() {
   return (
-    <section className="container-shell py-14">
-      <div className="mx-auto max-w-3xl text-center">
-        <p className="text-sm font-black uppercase tracking-[0.25em] text-deepsea-700">Av kategorileri</p>
-        <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-950 sm:text-6xl">Balık avı ekipmanlarını kategori kategori keşfedin.</h1>
-        <p className="mt-5 text-lg leading-8 text-slate-600">
-          Türkiye’deki mağazalardan toplanan fiyatları, ihtiyacınız olan av stiline göre filtreleyin.
+    <section className="container-shell py-10">
+      <div className="mb-6 border-b border-[#d0d7de] pb-4">
+        <div className="gh-label mb-3">Kategori indexi</div>
+        <h1 className="text-3xl font-semibold tracking-tight text-[#24292f]">Balık avı kategorileri</h1>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-[#57606a]">
+          Mağaza menülerine yakın kategori yapısı: kamışlar, makineler, yemler, misinalar ve aksesuarlar ayrı tutulur.
         </p>
       </div>
 
-      <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {categories.map((category) => {
-          const Icon = categoryIconMap[category.iconName];
-          return (
-            <Link key={category.slug} href={`/categories/${category.slug}`} className="group rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-cyan-200 hover:shadow-soft">
-              <div className="flex items-start justify-between gap-4">
-                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-50 text-deepsea-900 transition group-hover:bg-deepsea-900 group-hover:text-white">
-                  <Icon className="h-7 w-7" />
-                </span>
-                <ArrowRight className="h-5 w-5 text-slate-300 transition group-hover:translate-x-1 group-hover:text-lure" />
-              </div>
-              <h2 className="mt-6 text-xl font-black text-slate-950">{category.name}</h2>
-              <p className="mt-3 text-sm leading-7 text-slate-600">{category.description}</p>
-            </Link>
-          );
-        })}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {categories.map((category) => (
+          <Link key={category.slug} href={`/categories/${category.slug}`} className="gh-panel block p-4 hover:border-[#0969da]">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#57606a]">/{category.slug}</div>
+            <h2 className="text-base font-semibold text-[#0969da]">{category.name}</h2>
+            <p className="mt-2 text-sm leading-6 text-[#57606a]">{category.description}</p>
+          </Link>
+        ))}
       </div>
     </section>
   );

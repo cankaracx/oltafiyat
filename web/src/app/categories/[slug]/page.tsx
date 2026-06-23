@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, PackageSearch } from "lucide-react";
 import { categories } from "@/lib/categories";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient, type ProductRow, type StoreListingRow } from "@/lib/supabase";
@@ -80,33 +79,28 @@ export default async function CategoryDetailPage({ params }: CategoryPageProps) 
   const products = await getCategoryProducts(category.slug);
 
   return (
-    <section className="container-shell py-14">
-      <Link href="/categories" className="mb-8 inline-flex items-center gap-2 text-sm font-bold text-deepsea-900 hover:text-lure">
-        <ArrowLeft className="h-4 w-4" />
+    <section className="container-shell py-10">
+      <Link href="/categories" className="mb-5 inline-flex text-sm font-semibold text-[#0969da] hover:underline">
         Kategorilere dön
       </Link>
-      <div className="rounded-[2.5rem] bg-deepsea-900 p-8 text-white shadow-soft sm:p-10">
-        <p className="text-sm font-black uppercase tracking-[0.25em] text-cyan-200">Kategori</p>
-        <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-6xl">{category.name}</h1>
-        <p className="mt-5 max-w-2xl text-lg leading-8 text-cyan-50">{category.description}</p>
+      <div className="gh-panel p-5">
+        <div className="gh-label mb-3">Kategori</div>
+        <h1 className="text-3xl font-semibold tracking-tight text-[#24292f]">{category.name}</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#57606a]">{category.description}</p>
       </div>
 
-      <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-6 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {products.map((product) => (
-          <Link key={product.id} href={`/product/${product.id}`} className="group rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-soft">
-            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-50 text-deepsea-900 group-hover:bg-lure group-hover:text-white">
-              <PackageSearch className="h-6 w-6" />
-            </div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700">{product.brand || "Marka bilgisi bekleniyor"}</p>
-            <h2 className="mt-3 line-clamp-2 min-h-14 text-lg font-black text-slate-950">{product.title}</h2>
-            <div className="mt-6 flex items-end justify-between gap-4">
+          <Link key={product.id} href={`/product/${product.id}`} className="gh-panel block p-4 hover:border-[#0969da]">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#57606a]">{product.brand || "Marka bilgisi bekleniyor"}</p>
+            <h2 className="mt-2 line-clamp-2 min-h-12 text-base font-semibold text-[#0969da]">{product.title}</h2>
+            <div className="mt-4 flex items-end justify-between gap-4 border-t border-[#d8dee4] pt-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">En düşük fiyat</p>
-                <p className="text-2xl font-black text-deepsea-900">{formatTRY(product.lowestPrice)}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#57606a]">En düşük fiyat</p>
+                <p className="text-2xl font-semibold text-[#1a7f37]">{formatTRY(product.lowestPrice)}</p>
               </div>
-              <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+              <span className="border border-[#d0d7de] bg-[#f6f8fa] px-2 py-1 text-xs font-semibold text-[#57606a]">
                 {product.listingCount} teklif
-                <ArrowRight className="h-4 w-4" />
               </span>
             </div>
           </Link>
@@ -114,10 +108,9 @@ export default async function CategoryDetailPage({ params }: CategoryPageProps) 
       </div>
 
       {products.length === 0 ? (
-        <div className="mt-10 rounded-[2rem] border border-dashed border-slate-300 bg-white p-10 text-center">
-          <PackageSearch className="mx-auto h-10 w-10 text-slate-400" />
-          <h2 className="mt-4 text-2xl font-black text-slate-950">Bu kategoride henüz ürün yok.</h2>
-          <p className="mt-2 text-slate-600">Scraper ilk çalıştığında bu alan otomatik dolacaktır.</p>
+        <div className="mt-6 gh-panel border-dashed p-8 text-center">
+          <h2 className="text-xl font-semibold text-[#24292f]">Bu kategoride henüz ürün yok.</h2>
+          <p className="mt-2 text-sm text-[#57606a]">Scraper ilk çalıştığında bu alan otomatik dolacaktır.</p>
         </div>
       ) : null}
     </section>

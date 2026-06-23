@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, PackageSearch, Search } from "lucide-react";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient, type ProductRow, type StoreListingRow } from "@/lib/supabase";
 
@@ -75,62 +74,46 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const supabaseReady = Boolean(getSupabaseClient());
 
   return (
-    <section className="container-shell py-14">
-      <div className="rounded-[2.5rem] border border-slate-200 bg-white p-6 shadow-soft sm:p-8">
-        <p className="text-sm font-black uppercase tracking-[0.25em] text-deepsea-700">Fiyat arama</p>
-        <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-950 sm:text-6xl">Aradığınız ürünü yazın, en uygun mağazayı bulun.</h1>
-        <form action="/search" className="mt-8 flex flex-col gap-3 sm:flex-row">
+    <section className="container-shell py-10">
+      <div className="gh-panel p-4 sm:p-5">
+        <div className="gh-label mb-3">Fiyat arama</div>
+        <h1 className="text-2xl font-semibold tracking-tight text-[#24292f]">Ürün adı, model veya kategori ara.</h1>
+        <form action="/search" className="mt-5 flex flex-col gap-2 sm:flex-row">
           <label htmlFor="search-page-input" className="sr-only">Ürün adı</label>
-          <div className="flex flex-1 items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200 focus-within:ring-2 focus-within:ring-cyan-500">
-            <Search className="h-5 w-5 text-slate-400" />
-            <input
-              id="search-page-input"
-              name="q"
-              type="search"
-              defaultValue={query}
-              placeholder="Örn: rapala, lrf silikon, spin kamış"
-              className="w-full bg-transparent text-base font-medium text-slate-900 outline-none placeholder:text-slate-400"
-            />
-          </div>
-          <button type="submit" className="rounded-2xl bg-deepsea-900 px-7 py-4 font-black text-white transition hover:bg-deepsea-700">
+          <input id="search-page-input" name="q" type="search" defaultValue={query} placeholder="Örn: surf kamış, spin makine, lrf silikon" className="gh-input" />
+          <button type="submit" className="gh-button gh-button-primary whitespace-nowrap">
             Ara
           </button>
         </form>
       </div>
 
       {!supabaseReady ? (
-        <div className="mt-8 rounded-[2rem] border border-orange-200 bg-orange-50 p-6 text-orange-900">
+        <div className="mt-4 gh-panel border-[#fb8f44] bg-[#fff8c5] p-4 text-sm text-[#7d4e00]">
           Supabase bağlantısı henüz ayarlanmadı. Vercel veya yerel ortamda NEXT_PUBLIC_SUPABASE_URL ve NEXT_PUBLIC_SUPABASE_ANON_KEY değerlerini ekleyin.
         </div>
       ) : null}
 
-      <div className="mt-10 flex items-center justify-between gap-4">
-        <h2 className="text-2xl font-black text-slate-950">
+      <div className="mt-8 flex items-center justify-between gap-4 border-b border-[#d0d7de] pb-3">
+        <h2 className="text-lg font-semibold text-[#24292f]">
           {query ? `“${query}” için sonuçlar` : "Popüler bir ürün arayın"}
         </h2>
-        {query ? <span className="text-sm font-bold text-slate-500">{results.length} ürün</span> : null}
+        {query ? <span className="text-sm text-[#57606a]">{results.length} ürün</span> : null}
       </div>
 
       {query && results.length > 0 ? (
-        <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {results.map((product) => (
-            <Link key={product.id} href={`/product/${product.id}`} className="group rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-soft">
-              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-50 text-deepsea-900 group-hover:bg-lure group-hover:text-white">
-                <PackageSearch className="h-6 w-6" />
+            <Link key={product.id} href={`/product/${product.id}`} className="gh-panel block p-4 hover:border-[#0969da]">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#57606a]">{product.brand || "Marka yok"}</p>
+              <h3 className="mt-2 line-clamp-2 min-h-12 text-base font-semibold text-[#0969da]">{product.title}</h3>
+              <div className="mt-4 border-t border-[#d8dee4] pt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#57606a]">Lowest Price Found</p>
+                <p className="mt-1 text-2xl font-semibold text-[#1a7f37]">{formatTRY(product.lowestPrice)}</p>
+                <p className="mt-1 text-sm text-[#57606a]">{product.lowestStore ? `${product.lowestStore} mağazasında` : "Mağaza teklifi bekleniyor"}</p>
               </div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700">{product.brand || "Marka bilgisi yok"}</p>
-              <h3 className="mt-3 line-clamp-2 min-h-14 text-lg font-black text-slate-950">{product.title}</h3>
-              <div className="mt-6 rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-black uppercase tracking-wide text-lure">Lowest Price Found</p>
-                <p className="mt-1 text-3xl font-black text-deepsea-900">{formatTRY(product.lowestPrice)}</p>
-                <p className="mt-2 text-sm text-slate-500">{product.lowestStore ? `${product.lowestStore} mağazasında` : "Mağaza teklifi bekleniyor"}</p>
-              </div>
-              <div className="mt-5 flex items-center justify-between text-sm font-bold text-slate-500">
+              <div className="mt-4 flex items-center justify-between text-sm text-[#57606a]">
                 <span>{product.listingCount} fiyat teklifi</span>
-                <span className="inline-flex items-center gap-1 text-deepsea-900">
-                  Karşılaştır
-                  <ArrowRight className="h-4 w-4" />
-                </span>
+                <span className="font-semibold text-[#0969da]">Karşılaştır</span>
               </div>
             </Link>
           ))}
@@ -138,10 +121,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       ) : null}
 
       {query && results.length === 0 ? (
-        <div className="mt-6 rounded-[2rem] border border-dashed border-slate-300 bg-white p-10 text-center">
-          <PackageSearch className="mx-auto h-10 w-10 text-slate-400" />
-          <h2 className="mt-4 text-2xl font-black text-slate-950">Sonuç bulunamadı.</h2>
-          <p className="mt-2 text-slate-600">Daha kısa bir ürün adı deneyin veya scraper’ın ilk veri toplamasını bekleyin.</p>
+        <div className="mt-4 gh-panel border-dashed p-8 text-center">
+          <h2 className="text-xl font-semibold text-[#24292f]">Sonuç bulunamadı.</h2>
+          <p className="mt-2 text-sm text-[#57606a]">Daha kısa bir ürün adı deneyin veya scraper’ın ilk veri toplamasını bekleyin.</p>
         </div>
       ) : null}
     </section>

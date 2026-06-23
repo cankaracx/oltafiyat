@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink, Store, Tag } from "lucide-react";
 import { formatDateTime, formatTRY } from "@/lib/format";
 import { getSupabaseClient, type ProductRow, type StoreListingRow } from "@/lib/supabase";
 
@@ -68,50 +67,46 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const lowestListing = product.listings[0];
 
   return (
-    <section className="container-shell py-14">
-      <Link href="/search" className="mb-8 inline-flex items-center gap-2 text-sm font-bold text-deepsea-900 hover:text-lure">
-        <ArrowLeft className="h-4 w-4" />
+    <section className="container-shell py-10">
+      <Link href="/search" className="mb-5 inline-flex text-sm font-semibold text-[#0969da] hover:underline">
         Aramaya dön
       </Link>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="rounded-[2.5rem] border border-slate-200 bg-white p-8 shadow-soft sm:p-10">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-cyan-50 px-4 py-2 text-sm font-black text-deepsea-900">
-            <Tag className="h-4 w-4" />
+        <div className="gh-panel p-5 sm:p-6">
+          <div className="gh-label mb-3">
             Birleştirilmiş master ürün
           </div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-950 sm:text-6xl">{product.title}</h1>
-          <p className="mt-5 text-lg font-semibold text-slate-600">
-            Marka: <span className="text-deepsea-900">{product.brand || "Belirlenmedi"}</span>
+          <h1 className="text-3xl font-semibold tracking-tight text-[#24292f] sm:text-4xl">{product.title}</h1>
+          <p className="mt-3 text-sm text-[#57606a]">
+            Marka: <span className="font-semibold text-[#24292f]">{product.brand || "Belirlenmedi"}</span>
           </p>
         </div>
 
-        <aside className="rounded-[2.5rem] bg-deepsea-900 p-8 text-white shadow-soft">
-          <p className="text-sm font-black uppercase tracking-[0.22em] text-cyan-200">En iyi teklif</p>
-          <p className="mt-4 text-5xl font-black">{formatTRY(lowestListing?.price)}</p>
-          <p className="mt-3 text-cyan-50">{lowestListing ? `${lowestListing.store_name} mağazasında bulundu` : "Henüz aktif mağaza teklifi yok"}</p>
+        <aside className="gh-panel p-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#57606a]">En iyi teklif</p>
+          <p className="mt-2 text-4xl font-semibold text-[#1a7f37]">{formatTRY(lowestListing?.price)}</p>
+          <p className="mt-2 text-sm text-[#57606a]">{lowestListing ? `${lowestListing.store_name} mağazasında bulundu` : "Henüz aktif mağaza teklifi yok"}</p>
           {lowestListing ? (
-            <a href={lowestListing.product_url} target="_blank" rel="noopener noreferrer nofollow" className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-lure px-5 py-4 font-black text-white transition hover:bg-orange-600">
+            <a href={lowestListing.product_url} target="_blank" rel="noopener noreferrer nofollow" className="gh-button gh-button-primary mt-5 w-full">
               Mağazaya Git
-              <ExternalLink className="h-5 w-5" />
             </a>
           ) : null}
         </aside>
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 p-6">
-          <h2 className="flex items-center gap-2 text-2xl font-black text-slate-950">
-            <Store className="h-6 w-6 text-deepsea-900" />
+      <div className="mt-6 overflow-hidden gh-panel">
+        <div className="border-b border-[#d0d7de] bg-[#f6f8fa] p-4">
+          <h2 className="text-lg font-semibold text-[#24292f]">
             Mağaza fiyat karşılaştırması
           </h2>
-          <p className="mt-2 text-sm text-slate-500">Fiyatlar kesin olarak düşükten yükseğe sıralanmıştır.</p>
+          <p className="mt-1 text-sm text-[#57606a]">Fiyatlar düşükten yükseğe sıralanmıştır.</p>
         </div>
 
         {product.listings.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] border-collapse text-left">
-              <thead className="bg-slate-50 text-xs font-black uppercase tracking-[0.16em] text-slate-500">
+              <thead className="bg-[#f6f8fa] text-xs font-semibold uppercase tracking-wide text-[#57606a]">
                 <tr>
                   <th className="px-6 py-4">Mağaza</th>
                   <th className="px-6 py-4">Mağazadaki ürün adı</th>
@@ -120,22 +115,21 @@ export default async function ProductPage({ params }: ProductPageProps) {
                   <th className="px-6 py-4 text-right">Satın alma</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-[#d8dee4]">
                 {product.listings.map((listing, index) => (
-                  <tr key={listing.id} className={index === 0 ? "bg-cyan-50/50" : "bg-white"}>
-                    <td className="px-6 py-5 font-black text-slate-950">
+                  <tr key={listing.id} className={index === 0 ? "bg-[#dafbe1]" : "bg-white"}>
+                    <td className="px-6 py-4 font-semibold text-[#24292f]">
                       <div className="flex items-center gap-3">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-deepsea-900 text-white">{index + 1}</span>
+                        <span className="border border-[#d0d7de] bg-[#f6f8fa] px-2 py-1 text-xs text-[#57606a]">#{index + 1}</span>
                         {listing.store_name}
                       </div>
                     </td>
-                    <td className="max-w-sm px-6 py-5 text-sm font-medium leading-6 text-slate-700">{listing.raw_title}</td>
-                    <td className="px-6 py-5 text-sm text-slate-500">{formatDateTime(listing.updated_at)}</td>
-                    <td className="px-6 py-5 text-right text-2xl font-black text-deepsea-900">{formatTRY(listing.price)}</td>
-                    <td className="px-6 py-5 text-right">
-                      <a href={listing.product_url} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center justify-center gap-2 rounded-full bg-lure px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600">
+                    <td className="max-w-sm px-6 py-4 text-sm leading-6 text-[#57606a]">{listing.raw_title}</td>
+                    <td className="px-6 py-4 text-sm text-[#57606a]">{formatDateTime(listing.updated_at)}</td>
+                    <td className="px-6 py-4 text-right text-xl font-semibold text-[#1a7f37]">{formatTRY(listing.price)}</td>
+                    <td className="px-6 py-4 text-right">
+                      <a href={listing.product_url} target="_blank" rel="noopener noreferrer nofollow" className="gh-button">
                         Git
-                        <ExternalLink className="h-4 w-4" />
                       </a>
                     </td>
                   </tr>
@@ -144,10 +138,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
             </table>
           </div>
         ) : (
-          <div className="p-10 text-center">
-            <Store className="mx-auto h-10 w-10 text-slate-400" />
-            <h2 className="mt-4 text-2xl font-black text-slate-950">Bu ürün için mağaza kaydı bekleniyor.</h2>
-            <p className="mt-2 text-slate-600">Scraper yeni fiyatları topladığında liste otomatik oluşacaktır.</p>
+          <div className="p-8 text-center">
+            <h2 className="text-xl font-semibold text-[#24292f]">Bu ürün için mağaza kaydı bekleniyor.</h2>
+            <p className="mt-2 text-sm text-[#57606a]">Scraper yeni fiyatları topladığında liste otomatik oluşacaktır.</p>
           </div>
         )}
       </div>

@@ -26,19 +26,19 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <header className="sticky top-0 z-50 border-b border-[#d0d7de] bg-[#24292f] text-white">
           <div className="container-shell flex min-h-14 items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-3" aria-label="OltaFiyat ana sayfa">
-              <span className="grid h-8 w-8 place-items-center rounded bg-[#0969da] text-sm font-black">OF</span>
+              <span className="grid h-8 w-8 place-items-center bg-[#0969da] text-sm font-black">OF</span>
               <span className="font-semibold tracking-tight">OltaFiyat</span>
             </Link>
 
             <nav className="hidden items-center gap-1 md:flex" aria-label="Ana menü">
               {navItems.map((item) => (
-                <Link key={item.href} href={item.href} className="rounded px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white">
+                <Link key={item.href} href={item.href} className="px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white">
                   {item.label}
                 </Link>
               ))}
             </nav>
 
-            <Link href="/search" className="rounded border border-white/20 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/10">
+            <Link href="/search" className="border border-white/20 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/10">
               Ürün ara
             </Link>
           </div>

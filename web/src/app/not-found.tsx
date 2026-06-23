@@ -1,17 +1,16 @@
 import Link from "next/link";
-import { Fish } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <section className="container-shell py-20 text-center">
-      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[2rem] bg-cyan-50 text-deepsea-900">
-        <Fish className="h-10 w-10" />
-      </div>
-      <h1 className="mt-8 text-4xl font-black text-slate-950">Aradığınız sayfa bulunamadı.</h1>
-      <p className="mt-4 text-slate-600">Bu bağlantı kaldırılmış ya da henüz oluşturulmamış olabilir.</p>
-      <Link href="/" className="mt-8 inline-flex rounded-full bg-deepsea-900 px-6 py-3 font-black text-white hover:bg-deepsea-700">
+    <section className="container-shell py-20">
+      <div className="gh-panel mx-auto max-w-2xl p-8 text-center">
+      <div className="gh-label mx-auto mb-4">404</div>
+      <h1 className="text-3xl font-semibold text-[#24292f]">Aradığınız sayfa bulunamadı.</h1>
+      <p className="mt-3 text-sm text-[#57606a]">Bu bağlantı kaldırılmış ya da henüz oluşturulmamış olabilir.</p>
+      <Link href="/" className="gh-button gh-button-primary mt-6">
         Ana sayfaya dön
       </Link>
+      </div>
     </section>
   );
 }

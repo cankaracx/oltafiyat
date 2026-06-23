@@ -39,7 +39,7 @@ export default function HomePage() {
     <div>
       <section className="border-b border-[#d0d7de] bg-white">
         <div className="container-shell py-12">
-          <div className="mb-4 inline-flex rounded border border-[#d0d7de] bg-[#f6f8fa] px-2 py-1 text-xs font-semibold text-[#57606a]">
+          <div className="mb-4 inline-flex border border-[#d0d7de] bg-[#f6f8fa] px-2 py-1 text-xs font-semibold text-[#57606a]">
             Türkiye balık avı fiyat indexi
           </div>
           <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
@@ -96,7 +96,7 @@ export default function HomePage() {
                   <div className="text-sm text-[#57606a] line-through">{formatTRY(item.oldPrice)}</div>
                   <div className="text-2xl font-semibold text-[#1a7f37]">{formatTRY(item.newPrice)}</div>
                 </div>
-                <span className="rounded border border-[#a40e26]/20 bg-[#ffebe9] px-2 py-1 text-xs font-semibold text-[#cf222e]">-%{Math.round(((item.oldPrice - item.newPrice) / item.oldPrice) * 100)}</span>
+                <span className="border border-[#a40e26]/20 bg-[#ffebe9] px-2 py-1 text-xs font-semibold text-[#cf222e]">-%{Math.round(((item.oldPrice - item.newPrice) / item.oldPrice) * 100)}</span>
               </div>
             </Link>
           ))}
