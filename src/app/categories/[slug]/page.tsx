@@ -2,21 +2,18 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 import { mainCategories, categories } from "@/lib/categories";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient, type ProductRow, type StoreListingRow } from "@/lib/supabase";
 
+export const revalidate = 43200;
+
 const PAGE_SIZE = 24;
 
 type CategoryPageProps = {
-  params: {
-    slug: string;
-  };
-  searchParams: {
-    sub?: string;
-    sort?: string;
-    page?: string;
-  };
+  params: { slug: string };
+  searchParams: { sub?: string; sort?: string; page?: string };
 };
 
 type ProductWithLowest = ProductRow & {
@@ -25,345 +22,241 @@ type ProductWithLowest = ProductRow & {
   image_url: string | null;
 };
 
-export const revalidate = 43200; // 12 saat
-
 export function generateMetadata({ params }: CategoryPageProps): Metadata {
-  const mainCat = mainCategories.find((item) => item.slug === params.slug);
-  const subCat = categories.find((item) => item.slug === params.slug);
-
-  if (!mainCat && !subCat) {
-    return { title: "Kategori bulunamadı" };
-  }
-
-  return {
-    title: mainCat ? mainCat.name : subCat!.name,
-    description: mainCat ? mainCat.description : subCat!.description
-  };
+  const main = mainCategories.find((c) => c.slug === params.slug);
+  const sub  = categories.find((c) => c.slug === params.slug);
+  if (!main && !sub) return { title: "Kategori bulunamadı" };
+  const cat = main ?? sub!;
+  return { title: cat.name, description: cat.description };
 }
 
 async function getCategoryProducts(
-  categorySlug: string,
-  selectedSubSlug?: string,
-  sortBy?: string,
-  page = 1
-): Promise<{ products: ProductWithLowest[]; mainCategoryName: string; mainCategoryDesc: string; isMain: boolean; activeSubSlug: string | null; totalCount: number }> {
+  slug: string, subSlug?: string, sort = "newest", page = 1
+): Promise<{ products: ProductWithLowest[]; catName: string; catDesc: string; mainCat: typeof mainCategories[0] | undefined; activeSubSlug: string | null; totalCount: number }> {
   const supabase = getSupabaseClient();
-  if (!supabase) {
-    return { products: [], mainCategoryName: "", mainCategoryDesc: "", isMain: false, activeSubSlug: null, totalCount: 0 };
-  }
+  const empty = { products: [], catName: "", catDesc: "", mainCat: undefined, activeSubSlug: null, totalCount: 0 };
+  if (!supabase) return empty;
 
-  // 1. Identify if slug is main category or subcategory
-  let mainCat = mainCategories.find((c) => c.slug === categorySlug);
-  let subCat = categories.find((c) => c.slug === categorySlug);
+  let mainCat = mainCategories.find((c) => c.slug === slug);
+  let subCat  = categories.find((c) => c.slug === slug);
+  if (!mainCat && subCat) mainCat = mainCategories.find((c) => c.slug === subCat!.parentSlug);
+  if (!mainCat && !subCat) return { ...empty, catName: "Bilinmeyen Kategori" };
 
-  if (!mainCat && subCat) {
-    // If it's a subcategory direct URL, find its main category
-    mainCat = mainCategories.find((c) => c.slug === subCat!.parentSlug);
-  }
+  const catName = mainCat ? mainCat.name : subCat!.name;
+  const catDesc = mainCat ? mainCat.description : subCat!.description;
 
-  if (!mainCat && !subCat) {
-    return { products: [], mainCategoryName: "Bilinmeyen Kategori", mainCategoryDesc: "", isMain: false, activeSubSlug: null, totalCount: 0 };
-  }
-
-  const categoryName = mainCat ? mainCat.name : subCat!.name;
-  const categoryDesc = mainCat ? mainCat.description : subCat!.description;
-  const isMain = !!mainCat;
-
-  // 2. Determine target category IDs for querying
-  let targetSubSlugs: string[] = [];
+  let targetSlugs: string[] = [];
   let activeSubSlug: string | null = null;
 
-  if (selectedSubSlug) {
-    targetSubSlugs = [selectedSubSlug];
-    activeSubSlug = selectedSubSlug;
+  if (subSlug) {
+    targetSlugs = [subSlug];
+    activeSubSlug = subSlug;
   } else if (mainCat) {
-    // Use all subcategories of this main category
-    const subCategories = categories.filter((c) => c.parentSlug === mainCat!.slug);
-    targetSubSlugs = subCategories.map((c) => c.slug);
+    targetSlugs = categories.filter((c) => c.parentSlug === mainCat!.slug).map((c) => c.slug);
   } else if (subCat) {
-    // Single subcategory
-    targetSubSlugs = [subCat.slug];
+    targetSlugs = [subCat.slug];
     activeSubSlug = subCat.slug;
   }
 
-  if (targetSubSlugs.length === 0) {
-    return { products: [], mainCategoryName: categoryName, mainCategoryDesc: categoryDesc, isMain, activeSubSlug, totalCount: 0 };
-  }
+  if (!targetSlugs.length) return { ...empty, catName, catDesc, mainCat, activeSubSlug };
 
-  // Fetch category IDs from database
-  const categoriesResponse = await supabase
-    .from("categories")
-    .select("id, slug")
-    .in("slug", targetSubSlugs);
-  const categoryIds = categoriesResponse.data?.map((c) => c.id) ?? [];
-
-  if (categoryIds.length === 0) {
-    return { products: [], mainCategoryName: categoryName, mainCategoryDesc: categoryDesc, isMain, activeSubSlug, totalCount: 0 };
-  }
+  const { data: cats } = await supabase.from("categories").select("id, slug").in("slug", targetSlugs);
+  const catIds = cats?.map((c) => c.id) ?? [];
+  if (!catIds.length) return { ...empty, catName, catDesc, mainCat, activeSubSlug };
 
   const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
-
-  // 3. Query products with pagination
-  const productsResponse = await supabase
+  const { data: prods, count } = await supabase
     .from("products")
     .select("id, title, brand, category_id, slug, created_at", { count: "exact" })
-    .in("category_id", categoryIds)
+    .in("category_id", catIds)
     .order("created_at", { ascending: false })
-    .range(from, to);
+    .range(from, from + PAGE_SIZE - 1);
 
-  const products = productsResponse.data ?? [];
-  const totalCount = productsResponse.count ?? 0;
-  const productIds = products.map((product) => product.id);
+  const products = prods ?? [];
+  const totalCount = count ?? 0;
+  if (!products.length) return { products: [], catName, catDesc, mainCat, activeSubSlug, totalCount };
 
-  if (productIds.length === 0) {
-    return { products: [], mainCategoryName: categoryName, mainCategoryDesc: categoryDesc, isMain, activeSubSlug, totalCount };
-  }
-
-  // 4. Query listings for these products
-  const listingsResponse = await supabase
+  const { data: listData } = await supabase
     .from("store_listings")
     .select("id, product_id, store_name, raw_title, price, product_url, image_url, updated_at")
-    .in("product_id", productIds)
+    .in("product_id", products.map((p) => p.id))
     .order("price", { ascending: true });
 
-  const listings = (listingsResponse.data ?? []) as StoreListingRow[];
+  const listings = (listData ?? []) as StoreListingRow[];
 
-  // 5. Merge listings into products to find lowest price and image
-  let mergedProducts: ProductWithLowest[] = products.map((product) => {
-    const productListings = listings.filter((listing) => listing.product_id === product.id);
-    const lowestListing = productListings[0];
-    const image_url = productListings.find((l) => l.image_url)?.image_url ?? null;
-
+  let merged: ProductWithLowest[] = products.map((p) => {
+    const pl = listings.filter((l) => l.product_id === p.id);
     return {
-      ...product,
-      lowestPrice: lowestListing?.price ?? null,
-      listingCount: productListings.length,
-      image_url: image_url
+      ...p,
+      lowestPrice: pl[0]?.price ?? null,
+      listingCount: pl.length,
+      image_url: pl.find((l) => l.image_url)?.image_url ?? null
     };
   });
 
-  // 6. Sort in-memory
-  if (sortBy === "price_asc") {
-    mergedProducts.sort((a, b) => {
-      if (a.lowestPrice === null) return 1;
-      if (b.lowestPrice === null) return -1;
-      return a.lowestPrice - b.lowestPrice;
-    });
-  } else if (sortBy === "price_desc") {
-    mergedProducts.sort((a, b) => {
-      if (a.lowestPrice === null) return 1;
-      if (b.lowestPrice === null) return -1;
-      return b.lowestPrice - a.lowestPrice;
-    });
-  } else {
-    // Default or "newest": Sort by created_at descending
-    mergedProducts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }
+  if (sort === "price_asc") merged.sort((a, b) => (a.lowestPrice ?? Infinity) - (b.lowestPrice ?? Infinity));
+  else if (sort === "price_desc") merged.sort((a, b) => (b.lowestPrice ?? -Infinity) - (a.lowestPrice ?? -Infinity));
 
-  return {
-    products: mergedProducts,
-    mainCategoryName: categoryName,
-    mainCategoryDesc: categoryDesc,
-    isMain,
-    activeSubSlug,
-    totalCount
-  };
+  return { products: merged, catName, catDesc, mainCat, activeSubSlug, totalCount };
 }
 
+const SORT_OPTIONS = [
+  { value: "newest",     label: "En Yeni" },
+  { value: "price_asc",  label: "En Ucuz" },
+  { value: "price_desc", label: "En Pahalı" }
+];
+
 export default async function CategoryDetailPage({ params, searchParams }: CategoryPageProps) {
-  const currentSlug = params.slug;
-  const selectedSub = searchParams.sub;
-  const currentSort = searchParams.sort || "newest";
-  const currentPage = Math.max(1, Number(searchParams.page) || 1);
+  const slug = params.slug;
+  const sub  = searchParams.sub;
+  const sort = searchParams.sort || "newest";
+  const page = Math.max(1, Number(searchParams.page) || 1);
 
-  const { products, mainCategoryName, mainCategoryDesc, isMain, activeSubSlug, totalCount } = await getCategoryProducts(
-    currentSlug,
-    selectedSub,
-    currentSort,
-    currentPage
-  );
+  const { products, catName, catDesc, mainCat, activeSubSlug, totalCount } =
+    await getCategoryProducts(slug, sub, sort, page);
 
+  if (!mainCat) notFound();
+
+  const subCats   = categories.filter((c) => c.parentSlug === mainCat.slug);
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  // Determine main category mapping
-  let mainCat = mainCategories.find((c) => c.slug === currentSlug);
-  if (!mainCat) {
-    const subCat = categories.find((c) => c.slug === currentSlug);
-    if (subCat) {
-      mainCat = mainCategories.find((c) => c.slug === subCat.parentSlug);
-    }
-  }
-
-  if (!mainCat) {
-    notFound();
-  }
-
-  // Get all subcategories for filtering tabs
-  const subCats = categories.filter((c) => c.parentSlug === mainCat!.slug);
+  const pageQ = (extra = "") =>
+    `/categories/${slug}?${sub ? `sub=${sub}&` : ""}sort=${sort}${extra}`;
 
   return (
-    <section className="container-shell py-10">
-      <Link href="/categories" className="mb-5 inline-flex text-sm font-semibold text-[#0969da] hover:underline">
-        &larr; Tüm kategorilere dön
+    <section className="container-shell py-8">
+
+      {/* Breadcrumb */}
+      <Link href="/categories" className="mb-6 inline-flex items-center gap-1 text-sm text-[#57606a] hover:text-[#0969da] transition-colors">
+        <ChevronLeft size={14} /> Kategoriler
       </Link>
 
-      <div className="gh-panel p-6 mb-8">
-        <div className="gh-label mb-3">Ana Kategori</div>
-        <h1 className="text-3xl font-semibold tracking-tight text-[#24292f]">{mainCategoryName}</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#57606a]">{mainCategoryDesc}</p>
+      {/* Category header */}
+      <div className="panel p-5 mb-6">
+        <span className="badge-label mb-2 inline-block">Ana Kategori</span>
+        <h1 className="text-2xl font-extrabold tracking-tight text-[#1c2128]">{catName}</h1>
+        <p className="mt-1 text-sm text-[#57606a] leading-relaxed max-w-2xl">{catDesc}</p>
       </div>
 
-      {/* Subcategory Filtering Tabs */}
-      <div className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#24292f] mb-3">Alt Kategori Filtrele:</p>
-        <div className="flex flex-wrap gap-2">
+      {/* Sub-category tabs */}
+      {subCats.length > 0 && (
+        <div className="mb-5 flex flex-wrap gap-2">
           <Link
-            href={`/categories/${mainCat.slug}${currentSort ? `?sort=${currentSort}` : ""}`}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-              !activeSubSlug
-                ? "bg-[#0969da] text-white border-[#0969da]"
-                : "bg-[#f6f8fa] text-[#57606a] border-[#d0d7de] hover:bg-[#f3f4f6]"
-            }`}
+            href={`/categories/${mainCat.slug}?sort=${sort}`}
+            className={`btn btn-sm ${!activeSubSlug ? "btn-blue" : ""}`}
           >
-            Tüm {mainCat.name} ({categories.filter(c => c.parentSlug === mainCat!.slug).reduce((acc, c) => acc, 0) || "Hepsi"})
+            Tümü
           </Link>
-          {subCats.map((sub) => (
+          {subCats.map((s) => (
             <Link
-              key={sub.slug}
-              href={`/categories/${mainCat!.slug}?sub=${sub.slug}${currentSort ? `&sort=${currentSort}` : ""}`}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                activeSubSlug === sub.slug
-                  ? "bg-[#0969da] text-white border-[#0969da]"
-                  : "bg-[#f6f8fa] text-[#57606a] border-[#d0d7de] hover:bg-[#f3f4f6]"
-              }`}
+              key={s.slug}
+              href={`/categories/${mainCat.slug}?sub=${s.slug}&sort=${sort}`}
+              className={`btn btn-sm ${activeSubSlug === s.slug ? "btn-blue" : ""}`}
             >
-              {sub.name}
+              {s.name}
             </Link>
           ))}
         </div>
-      </div>
+      )}
 
-      {/* Sorting Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-[#d0d7de] pb-4 mb-6 gap-4">
-        <div>
-          <span className="text-sm text-[#57606a] font-medium">
-            {totalCount} ürün listeleniyor — sayfa {currentPage} / {totalPages || 1}
-          </span>
-        </div>
+      {/* Sort + count bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+        <p className="text-sm text-[#57606a]">
+          <strong className="text-[#1c2128]">{totalCount}</strong> ürün
+          {page > 1 && ` — sayfa ${page} / ${totalPages}`}
+        </p>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-[#57606a] whitespace-nowrap">Sıralama:</span>
-          <div className="flex gap-1 bg-[#f6f8fa] p-1 rounded-md border border-[#d0d7de]">
-            <Link
-              href={`/categories/${currentSlug}?${selectedSub ? `sub=${selectedSub}&` : ""}sort=newest`}
-              className={`px-3 py-1 text-xs font-semibold rounded ${
-                currentSort === "newest" ? "bg-white text-[#24292f] shadow-sm border border-[#d0d7de]" : "text-[#57606a] hover:text-[#24292f]"
-              }`}
-            >
-              En Yeni
-            </Link>
-            <Link
-              href={`/categories/${currentSlug}?${selectedSub ? `sub=${selectedSub}&` : ""}sort=price_asc`}
-              className={`px-3 py-1 text-xs font-semibold rounded ${
-                currentSort === "price_asc" ? "bg-white text-[#24292f] shadow-sm border border-[#d0d7de]" : "text-[#57606a] hover:text-[#24292f]"
-              }`}
-            >
-              En Ucuz
-            </Link>
-            <Link
-              href={`/categories/${currentSlug}?${selectedSub ? `sub=${selectedSub}&` : ""}sort=price_desc`}
-              className={`px-3 py-1 text-xs font-semibold rounded ${
-                currentSort === "price_desc" ? "bg-white text-[#24292f] shadow-sm border border-[#d0d7de]" : "text-[#57606a] hover:text-[#24292f]"
-              }`}
-            >
-              En Pahalı
-            </Link>
+          <span className="text-sm text-[#57606a]">Sıralama:</span>
+          <div className="flex rounded-md border border-[#d0d7de] bg-[#f6f8fa] p-0.5 gap-0.5">
+            {SORT_OPTIONS.map((opt) => (
+              <Link
+                key={opt.value}
+                href={`/categories/${slug}?${sub ? `sub=${sub}&` : ""}sort=${opt.value}`}
+                className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${
+                  sort === opt.value
+                    ? "bg-white text-[#1c2128] shadow-sm border border-[#d0d7de]"
+                    : "text-[#57606a] hover:text-[#1c2128]"
+                }`}
+              >
+                {opt.label}
+              </Link>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Product Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {products.map((product) => (
-          <Link key={product.id} href={`/product/${product.id}`} className="gh-panel flex flex-col justify-between p-4 hover:border-[#0969da] transition-colors group">
-            <div>
-              {/* Product Image Thumbnail */}
-              <div className="w-full h-44 bg-white border border-[#e1e4e8] rounded-md mb-4 overflow-hidden flex items-center justify-center p-3 relative">
+      {/* Product grid */}
+      {products.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {products.map((product) => (
+            <Link
+              key={product.id}
+              href={`/product/${product.id}`}
+              className="panel group flex flex-col hover:shadow-md hover:border-[#0969da]/40 transition-all"
+            >
+              {/* Image */}
+              <div className="relative h-40 overflow-hidden rounded-t-[10px] bg-[#f6f8fa] border-b border-[#e8ecf0] flex items-center justify-center">
                 {product.image_url ? (
                   <Image
                     src={product.image_url}
                     alt={product.title}
                     fill
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                    className="object-contain p-3 group-hover:scale-105 transition-transform duration-200"
+                    sizes="(max-width: 640px) 50vw, 25vw"
+                    className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
                   />
                 ) : (
-                  <span className="text-xs text-[#57606a] italic">Görsel Yok</span>
+                  <span className="text-4xl opacity-15">🎣</span>
                 )}
-                {product.brand ? (
-                  <span className="absolute top-2 left-2 z-10 bg-[#f6f8fa] border border-[#d0d7de] text-[#24292f] text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider rounded">
-                    {product.brand}
+                {product.listingCount > 1 && (
+                  <span className="absolute top-2 right-2 badge badge-blue">
+                    {product.listingCount} mağaza
                   </span>
-                ) : null}
+                )}
+                {product.brand && (
+                  <span className="absolute top-2 left-2 badge">{product.brand}</span>
+                )}
               </div>
 
-              <span className="text-xs font-semibold text-[#57606a] uppercase tracking-wide">
-                {product.brand || "Marka Bilgisi Yok"}
-              </span>
-              <h2 className="mt-1 line-clamp-2 min-h-12 text-base font-semibold text-[#0969da] group-hover:underline">
-                {product.title}
-              </h2>
-            </div>
-
-            <div className="mt-4 flex items-end justify-between gap-4 border-t border-[#d8dee4] pt-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#57606a]">En Düşük Fiyat</p>
-                <p className="text-2xl font-semibold text-[#1a7f37]">
-                  {product.lowestPrice !== null ? formatTRY(product.lowestPrice) : "Fiyat Bekleniyor"}
-                </p>
+              {/* Info */}
+              <div className="flex flex-col flex-1 justify-between p-3.5">
+                <h2 className="text-sm font-semibold text-[#1c2128] line-clamp-2 leading-snug min-h-10 group-hover:text-[#0969da] transition-colors">
+                  {product.title}
+                </h2>
+                <div className="mt-3 flex items-end justify-between border-t border-[#e8ecf0] pt-3">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-[#57606a]">En düşük fiyat</p>
+                    <p className="price mt-0.5 text-xl">
+                      {product.lowestPrice !== null ? formatTRY(product.lowestPrice) : "—"}
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold text-[#0969da]">İncele →</span>
+                </div>
               </div>
-              <span className="border border-[#d0d7de] bg-[#f6f8fa] px-2.5 py-1 text-xs font-semibold text-[#57606a]">
-                {product.listingCount} teklif
-              </span>
-            </div>
-          </Link>
-        ))}
-      </div>
-
-      {products.length === 0 ? (
-        <div className="mt-6 gh-panel border-dashed p-8 text-center bg-[#fafbfc]">
-          <h2 className="text-xl font-semibold text-[#24292f]">Bu kategoride henüz ürün yok.</h2>
-          <p className="mt-2 text-sm text-[#57606a]">Scraper yeni veriler topladığında burası otomatik dolacaktır.</p>
+            </Link>
+          ))}
         </div>
-      ) : null}
+      ) : (
+        <div className="panel border-dashed p-12 text-center">
+          <p className="text-4xl mb-4 opacity-30">📦</p>
+          <h2 className="text-lg font-bold text-[#1c2128]">Bu kategoride henüz ürün yok</h2>
+          <p className="mt-2 text-sm text-[#57606a]">Scraper yeni veriler topladığında otomatik görünecektir.</p>
+        </div>
+      )}
 
-      {totalPages > 1 ? (
+      {/* Pagination */}
+      {totalPages > 1 && (
         <nav aria-label="Sayfalama" className="mt-8 flex items-center justify-center gap-2">
-          {currentPage > 1 ? (
-            <Link
-              href={`/categories/${currentSlug}?${selectedSub ? `sub=${selectedSub}&` : ""}sort=${currentSort}&page=${currentPage - 1}`}
-              className="gh-button px-4 py-2 text-sm font-semibold"
-              aria-label="Önceki sayfa"
-            >
-              &larr; Önceki
-            </Link>
-          ) : null}
-
+          {page > 1 && (
+            <Link href={pageQ(`&page=${page - 1}`)} className="btn">← Önceki</Link>
+          )}
           <span className="px-4 py-2 text-sm text-[#57606a]">
-            Sayfa {currentPage} / {totalPages}
+            Sayfa {page} / {totalPages}
           </span>
-
-          {currentPage < totalPages ? (
-            <Link
-              href={`/categories/${currentSlug}?${selectedSub ? `sub=${selectedSub}&` : ""}sort=${currentSort}&page=${currentPage + 1}`}
-              className="gh-button px-4 py-2 text-sm font-semibold"
-              aria-label="Sonraki sayfa"
-            >
-              Sonraki &rarr;
-            </Link>
-          ) : null}
+          {page < totalPages && (
+            <Link href={pageQ(`&page=${page + 1}`)} className="btn">Sonraki →</Link>
+          )}
         </nav>
-      ) : null}
+      )}
     </section>
   );
 }

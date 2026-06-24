@@ -2,14 +2,17 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <section className="container-shell py-20">
-      <div className="gh-panel mx-auto max-w-2xl p-8 text-center">
-      <div className="gh-label mx-auto mb-4">404</div>
-      <h1 className="text-3xl font-semibold text-[#24292f]">Aradığınız sayfa bulunamadı.</h1>
-      <p className="mt-3 text-sm text-[#57606a]">Bu bağlantı kaldırılmış ya da henüz oluşturulmamış olabilir.</p>
-      <Link href="/" className="gh-button gh-button-primary mt-6">
-        Ana sayfaya dön
-      </Link>
+    <section className="container-shell py-24">
+      <div className="panel mx-auto max-w-lg p-10 text-center">
+        <p className="text-5xl mb-5 opacity-30">🎣</p>
+        <span className="badge-label mb-4 inline-block">404</span>
+        <h1 className="text-2xl font-bold text-[#1c2128]">Sayfa bulunamadı</h1>
+        <p className="mt-2 text-sm text-[#57606a]">
+          Bu bağlantı kaldırılmış ya da henüz oluşturulmamış olabilir.
+        </p>
+        <Link href="/" className="btn btn-primary mt-6 inline-flex">
+          Ana sayfaya dön
+        </Link>
       </div>
     </section>
   );
