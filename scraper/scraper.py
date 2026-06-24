@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -28,16 +29,26 @@ SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL"
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 REQUEST_TIMEOUT_SECONDS = 25
-MATCH_CONFIDENCE = 0.85
-MAX_SEARCH_URLS_PER_STORE = int(os.getenv("MAX_SEARCH_URLS_PER_STORE", "140"))
-MAX_PAGES_PER_QUERY = int(os.getenv("MAX_PAGES_PER_QUERY", "3"))
-MAX_SITEMAP_URLS_PER_STORE = int(os.getenv("MAX_SITEMAP_URLS_PER_STORE", "250"))
-MAX_DETAIL_URLS_PER_STORE = int(os.getenv("MAX_DETAIL_URLS_PER_STORE", "300"))
-REQUEST_DELAY_SECONDS = float(os.getenv("REQUEST_DELAY_SECONDS", "0.4"))
+MATCH_CONFIDENCE = 0.88
+MAX_SEARCH_URLS_PER_STORE = int(os.getenv("MAX_SEARCH_URLS_PER_STORE", "200"))
+MAX_PAGES_PER_QUERY = int(os.getenv("MAX_PAGES_PER_QUERY", "4"))
+MAX_SITEMAP_URLS_PER_STORE = int(os.getenv("MAX_SITEMAP_URLS_PER_STORE", "400"))
+MAX_DETAIL_URLS_PER_STORE = int(os.getenv("MAX_DETAIL_URLS_PER_STORE", "500"))
+REQUEST_DELAY_SECONDS = float(os.getenv("REQUEST_DELAY_SECONDS", "0.5"))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+RETRY_BACKOFF = float(os.getenv("RETRY_BACKOFF", "2.0"))
+
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0 Safari/537.36 OltaFiyatBot/1.0"
 )
+
+HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+}
 
 
 @dataclass(frozen=True)
@@ -45,6 +56,8 @@ class StoreTarget:
     name: str
     base_url: str
     urls: tuple[str, ...]
+    search_path: str = "/arama"
+    search_param: str = "q"
 
 
 @dataclass(frozen=True)
@@ -58,40 +71,339 @@ class ParsedListing:
     category_slug: str
 
 
+# ─── STORES ──────────────────────────────────────────────────────────────────
+# Seed URLs per store: category pages + curated search queries.
+# Scraper also auto-generates search URLs for all SEARCH_KEYWORDS.
+
 STORE_TARGETS: tuple[StoreTarget, ...] = (
-    StoreTarget("Olta Mühendisi", "https://www.oltamuhendisi.com", ("https://www.oltamuhendisi.com/arama?q=lrf", "https://www.oltamuhendisi.com/arama?q=spin")),
-    StoreTarget("Sihirli Olta", "https://www.sihirliolta.com", ("https://www.sihirliolta.com/arama?q=lrf", "https://www.sihirliolta.com/arama?q=rapala")),
-    StoreTarget("Alba Shop", "https://www.albashop.com.tr", ("https://www.albashop.com.tr/arama?q=maket+balik", "https://www.albashop.com.tr/arama?q=jig")),
-    StoreTarget("Oltaya Gel", "https://www.oltayagel.com", ("https://www.oltayagel.com/arama?q=lrf", "https://www.oltayagel.com/arama?q=spin")),
-    StoreTarget("Avmar", "https://www.avmar.com.tr", ("https://www.avmar.com.tr/arama?q=rapala", "https://www.avmar.com.tr/arama?q=ip+misina")),
-    StoreTarget("Spot Balık", "https://www.spotbalik.com.tr", ("https://www.spotbalik.com.tr/arama?q=lrf", "https://www.spotbalik.com.tr/arama?q=kamış")),
-    StoreTarget("İnce Çizgi", "https://www.incecizgi.com", ("https://www.incecizgi.com/arama?q=sahte", "https://www.incecizgi.com/arama?q=jighead")),
-    StoreTarget("Ergin Balıkçılık", "https://www.erginbalikcilik.com", ("https://www.erginbalikcilik.com/arama?q=lrf", "https://www.erginbalikcilik.com/arama?q=çanta")),
-    StoreTarget("Balık Av Marketim", "https://www.balikavmarketim.com", ("https://www.balikavmarketim.com/arama?q=spin", "https://www.balikavmarketim.com/arama?q=surf")),
-    StoreTarget("Avfoni", "https://www.avfoni.com", ("https://www.avfoni.com/arama?q=olta", "https://www.avfoni.com/arama?q=rapala")),
-    StoreTarget("Av Sepeti", "https://www.avsepeti.com", ("https://www.avsepeti.com/arama?q=kamış", "https://www.avsepeti.com/arama?q=makine")),
-    StoreTarget("Kamp Av", "https://www.kampav.com", ("https://www.kampav.com/arama?q=balık", "https://www.kampav.com/arama?q=olta")),
-    StoreTarget("Av Marketi", "https://www.avmarketi.com", ("https://www.avmarketi.com/arama?q=olta", "https://www.avmarketi.com/arama?q=misina")),
-    StoreTarget("Rastgele Av", "https://www.rastgeleav.com", ("https://www.rastgeleav.com/arama?q=spin", "https://www.rastgeleav.com/arama?q=lrf")),
-    StoreTarget("Balık Marketim", "https://www.balikmarketim.com", ("https://www.balikmarketim.com/arama?q=rapala", "https://www.balikmarketim.com/arama?q=jig")),
-    StoreTarget("Av Deposu", "https://www.avdeposu.com", ("https://www.avdeposu.com/arama?q=olta", "https://www.avdeposu.com/arama?q=kamış")),
+    StoreTarget(
+        "Olta Mühendisi", "https://www.oltamuhendisi.com",
+        (
+            "https://www.oltamuhendisi.com/lrf-kamislar",
+            "https://www.oltamuhendisi.com/lrf-makineler",
+            "https://www.oltamuhendisi.com/spin-kamislar",
+            "https://www.oltamuhendisi.com/spin-makineleri",
+            "https://www.oltamuhendisi.com/surf-kamislar",
+            "https://www.oltamuhendisi.com/suni-yemler",
+            "https://www.oltamuhendisi.com/misina",
+            "https://www.oltamuhendisi.com/aksesuar",
+            "https://www.oltamuhendisi.com/arama?q=lrf",
+            "https://www.oltamuhendisi.com/arama?q=spin",
+            "https://www.oltamuhendisi.com/arama?q=surf",
+            "https://www.oltamuhendisi.com/arama?q=jigging",
+        ),
+    ),
+    StoreTarget(
+        "Sihirli Olta", "https://www.sihirliolta.com",
+        (
+            "https://www.sihirliolta.com/lrf-kamislar",
+            "https://www.sihirliolta.com/lrf-makineler",
+            "https://www.sihirliolta.com/spin-kamislar",
+            "https://www.sihirliolta.com/spin-makineleri",
+            "https://www.sihirliolta.com/surf-kamislar",
+            "https://www.sihirliolta.com/suni-yemler",
+            "https://www.sihirliolta.com/jigging",
+            "https://www.sihirliolta.com/misina",
+            "https://www.sihirliolta.com/arama?q=lrf",
+            "https://www.sihirliolta.com/arama?q=rapala",
+            "https://www.sihirliolta.com/arama?q=silikon",
+        ),
+    ),
+    StoreTarget(
+        "Alba Shop", "https://www.albashop.com.tr",
+        (
+            "https://www.albashop.com.tr/lrf-kamislar",
+            "https://www.albashop.com.tr/lrf-makineler",
+            "https://www.albashop.com.tr/spin",
+            "https://www.albashop.com.tr/surf",
+            "https://www.albashop.com.tr/suni-yemler",
+            "https://www.albashop.com.tr/misina",
+            "https://www.albashop.com.tr/arama?q=maket+balik",
+            "https://www.albashop.com.tr/arama?q=jig",
+            "https://www.albashop.com.tr/arama?q=silikon",
+            "https://www.albashop.com.tr/arama?q=kamis",
+        ),
+    ),
+    StoreTarget(
+        "Oltaya Gel", "https://www.oltayagel.com",
+        (
+            "https://www.oltayagel.com/lrf",
+            "https://www.oltayagel.com/spin",
+            "https://www.oltayagel.com/surf",
+            "https://www.oltayagel.com/jigging",
+            "https://www.oltayagel.com/suni-yemler",
+            "https://www.oltayagel.com/misina",
+            "https://www.oltayagel.com/aksesuar",
+            "https://www.oltayagel.com/arama?q=lrf",
+            "https://www.oltayagel.com/arama?q=spin",
+            "https://www.oltayagel.com/arama?q=rapala",
+        ),
+    ),
+    StoreTarget(
+        "Avmar", "https://www.avmar.com.tr",
+        (
+            "https://www.avmar.com.tr/olta-kamislar",
+            "https://www.avmar.com.tr/olta-makineleri",
+            "https://www.avmar.com.tr/suni-yemler",
+            "https://www.avmar.com.tr/misina",
+            "https://www.avmar.com.tr/aksesuar",
+            "https://www.avmar.com.tr/arama?q=rapala",
+            "https://www.avmar.com.tr/arama?q=ip+misina",
+            "https://www.avmar.com.tr/arama?q=lrf",
+            "https://www.avmar.com.tr/arama?q=shimano",
+            "https://www.avmar.com.tr/arama?q=daiwa",
+        ),
+    ),
+    StoreTarget(
+        "Spot Balık", "https://www.spotbalik.com.tr",
+        (
+            "https://www.spotbalik.com.tr/lrf",
+            "https://www.spotbalik.com.tr/spin",
+            "https://www.spotbalik.com.tr/surf",
+            "https://www.spotbalik.com.tr/jigging",
+            "https://www.spotbalik.com.tr/suni-yemler",
+            "https://www.spotbalik.com.tr/misina",
+            "https://www.spotbalik.com.tr/arama?q=lrf",
+            "https://www.spotbalik.com.tr/arama?q=kamis",
+            "https://www.spotbalik.com.tr/arama?q=silikon",
+        ),
+    ),
+    StoreTarget(
+        "İnce Çizgi", "https://www.incecizgi.com",
+        (
+            "https://www.incecizgi.com/lrf-kamislar",
+            "https://www.incecizgi.com/lrf-makineler",
+            "https://www.incecizgi.com/spin",
+            "https://www.incecizgi.com/suni-yemler",
+            "https://www.incecizgi.com/misina",
+            "https://www.incecizgi.com/aksesuar",
+            "https://www.incecizgi.com/arama?q=sahte",
+            "https://www.incecizgi.com/arama?q=jighead",
+            "https://www.incecizgi.com/arama?q=lrf",
+        ),
+    ),
+    StoreTarget(
+        "Ergin Balıkçılık", "https://www.erginbalikcilik.com",
+        (
+            "https://www.erginbalikcilik.com/kamislar",
+            "https://www.erginbalikcilik.com/makineler",
+            "https://www.erginbalikcilik.com/yemler",
+            "https://www.erginbalikcilik.com/misina",
+            "https://www.erginbalikcilik.com/arama?q=lrf",
+            "https://www.erginbalikcilik.com/arama?q=canta",
+        ),
+    ),
+    StoreTarget(
+        "Balık Av Marketim", "https://www.balikavmarketim.com",
+        (
+            "https://www.balikavmarketim.com/kamislar",
+            "https://www.balikavmarketim.com/makineler",
+            "https://www.balikavmarketim.com/yemler",
+            "https://www.balikavmarketim.com/misina",
+            "https://www.balikavmarketim.com/arama?q=spin",
+            "https://www.balikavmarketim.com/arama?q=surf",
+        ),
+    ),
+    StoreTarget(
+        "Avfoni", "https://www.avfoni.com",
+        (
+            "https://www.avfoni.com/olta-kamislar",
+            "https://www.avfoni.com/olta-makineleri",
+            "https://www.avfoni.com/suni-yemler",
+            "https://www.avfoni.com/misina",
+            "https://www.avfoni.com/arama?q=olta",
+            "https://www.avfoni.com/arama?q=rapala",
+        ),
+    ),
+    StoreTarget(
+        "Av Sepeti", "https://www.avsepeti.com",
+        (
+            "https://www.avsepeti.com/olta-kamislar",
+            "https://www.avsepeti.com/olta-makineleri",
+            "https://www.avsepeti.com/suni-yemler",
+            "https://www.avsepeti.com/arama?q=kamis",
+            "https://www.avsepeti.com/arama?q=makine",
+        ),
+    ),
+    StoreTarget(
+        "Kamp Av", "https://www.kampav.com",
+        (
+            "https://www.kampav.com/balik-avi",
+            "https://www.kampav.com/olta-kamislar",
+            "https://www.kampav.com/olta-makineleri",
+            "https://www.kampav.com/arama?q=balik",
+            "https://www.kampav.com/arama?q=olta",
+        ),
+    ),
+    StoreTarget(
+        "Av Marketi", "https://www.avmarketi.com",
+        (
+            "https://www.avmarketi.com/olta-kamislar",
+            "https://www.avmarketi.com/olta-makineleri",
+            "https://www.avmarketi.com/suni-yemler",
+            "https://www.avmarketi.com/arama?q=olta",
+            "https://www.avmarketi.com/arama?q=misina",
+        ),
+    ),
+    StoreTarget(
+        "Rastgele Av", "https://www.rastgeleav.com",
+        (
+            "https://www.rastgeleav.com/olta-kamislar",
+            "https://www.rastgeleav.com/olta-makineleri",
+            "https://www.rastgeleav.com/suni-yemler",
+            "https://www.rastgeleav.com/misina",
+            "https://www.rastgeleav.com/arama?q=spin",
+            "https://www.rastgeleav.com/arama?q=lrf",
+            "https://www.rastgeleav.com/arama?q=jigging",
+        ),
+    ),
+    StoreTarget(
+        "Balık Marketim", "https://www.balikmarketim.com",
+        (
+            "https://www.balikmarketim.com/kamislar",
+            "https://www.balikmarketim.com/makineler",
+            "https://www.balikmarketim.com/yemler",
+            "https://www.balikmarketim.com/arama?q=rapala",
+            "https://www.balikmarketim.com/arama?q=jig",
+        ),
+    ),
+    StoreTarget(
+        "Av Deposu", "https://www.avdeposu.com",
+        (
+            "https://www.avdeposu.com/olta-kamislar",
+            "https://www.avdeposu.com/olta-makineleri",
+            "https://www.avdeposu.com/suni-yemler",
+            "https://www.avdeposu.com/arama?q=olta",
+            "https://www.avdeposu.com/arama?q=kamis",
+        ),
+    ),
+    # ── Additional stores ─────────────────────────────────────────────────────
+    StoreTarget(
+        "Mega Fisher", "https://www.megafisher.com.tr",
+        (
+            "https://www.megafisher.com.tr/kamislar",
+            "https://www.megafisher.com.tr/makineler",
+            "https://www.megafisher.com.tr/yemler",
+            "https://www.megafisher.com.tr/misina",
+            "https://www.megafisher.com.tr/arama?q=lrf",
+            "https://www.megafisher.com.tr/arama?q=spin",
+        ),
+    ),
+    StoreTarget(
+        "Joy Fish", "https://www.joyfish.com.tr",
+        (
+            "https://www.joyfish.com.tr/kamislar",
+            "https://www.joyfish.com.tr/makineler",
+            "https://www.joyfish.com.tr/yemler",
+            "https://www.joyfish.com.tr/arama?q=lrf",
+            "https://www.joyfish.com.tr/arama?q=rapala",
+        ),
+    ),
+    StoreTarget(
+        "Oltacı", "https://www.oltaci.com",
+        (
+            "https://www.oltaci.com/kamislar",
+            "https://www.oltaci.com/makineler",
+            "https://www.oltaci.com/yemler",
+            "https://www.oltaci.com/misina",
+            "https://www.oltaci.com/arama?q=olta",
+            "https://www.oltaci.com/arama?q=shimano",
+        ),
+    ),
+    StoreTarget(
+        "Balık Av Market", "https://www.balikavmarket.com",
+        (
+            "https://www.balikavmarket.com/kamislar",
+            "https://www.balikavmarket.com/makineler",
+            "https://www.balikavmarket.com/yemler",
+            "https://www.balikavmarket.com/arama?q=lrf",
+            "https://www.balikavmarket.com/arama?q=spin",
+        ),
+    ),
+    StoreTarget(
+        "Olta Store", "https://www.oltastore.com",
+        (
+            "https://www.oltastore.com/kamislar",
+            "https://www.oltastore.com/makineler",
+            "https://www.oltastore.com/yemler",
+            "https://www.oltastore.com/arama?q=olta",
+            "https://www.oltastore.com/arama?q=lrf",
+        ),
+    ),
+    StoreTarget(
+        "Balıkçılık Dünyası", "https://www.balikcilikdunyasi.com",
+        (
+            "https://www.balikcilikdunyasi.com/kamislar",
+            "https://www.balikcilikdunyasi.com/makineler",
+            "https://www.balikcilikdunyasi.com/yemler",
+            "https://www.balikcilikdunyasi.com/arama?q=lrf",
+            "https://www.balikcilikdunyasi.com/arama?q=surf",
+        ),
+    ),
+    StoreTarget(
+        "Net Tackle", "https://www.nettackle.com.tr",
+        (
+            "https://www.nettackle.com.tr/kamislar",
+            "https://www.nettackle.com.tr/makineler",
+            "https://www.nettackle.com.tr/yemler",
+            "https://www.nettackle.com.tr/arama?q=lrf",
+            "https://www.nettackle.com.tr/arama?q=rapala",
+        ),
+    ),
 )
 
 
+# ─── SEARCH KEYWORDS ─────────────────────────────────────────────────────────
+
 SEARCH_KEYWORDS = (
-    "lrf", "silikon", "sahte", "rapala", "maket balık", "minnow", "jig", "jighead",
-    "jig kafa", "shore jig", "spin kamış", "spin", "kamış", "ip misina", "örgü misina",
-    "pe misina", "klips", "snap", "fırdöndü", "kurşun arkası", "raglou", "gece avı",
-    "uv sahte", "glow", "çanta", "balıkçı çantası", "kamış ayağı", "tripod", "olta",
-    "makine", "olta makinesi", "iğne", "owner", "decoy", "daiwa", "shimano", "okuma",
-    "rapala klips", "kaşık", "metal jig", "karides", "worm", "duel", "yo-zuri",
-    "surf kamış", "surf makine", "long cast", "baitrunner", "tekne kamış", "tekne makine",
-    "jigging kamış", "jigging makine", "slow jig", "trolling", "çıkrık", "cikrik",
-    "monofilament", "fluorocarbon", "leader", "shock leader", "şamandıra", "samandira",
-    "kurşun", "kursun", "assist hook", "offset", "üçlü iğne", "uclu igne", "treble",
-    "kepçe", "kepce", "lip grip", "boga grip", "balık tutucu", "takım kutusu", "lure box",
-    "wader", "çizme", "cizme", "yağmurluk", "yagmurluk", "eldiven", "balık bulucu",
-    "kafa lambası", "pense", "makine yağı", "yedek makara", "alba", "remixon", "kendo",
+    # Fishing styles
+    "lrf", "light rock fishing", "ajing", "rock fishing", "ultra light",
+    "spin", "spinning", "surf casting", "surf", "long cast",
+    "jigging", "slow jigging", "vertical jigging", "shore jigging",
+    "trolling", "tekne avi", "dip avi",
+    # Rods
+    "olta kamisi", "spin kamisi", "lrf kamisi", "surf kamisi", "jigging kamisi",
+    "tekne kamisi", "feeder kamisi",
+    # Reels
+    "olta makinesi", "spin makinesi", "lrf makinesi", "surf makinesi",
+    "jigging makinesi", "baitrunner", "cikrik",
+    # Lures & soft baits
+    "rapala", "minnow", "sahte balik", "maket balik", "jerkbait", "pencil",
+    "popper", "wobbler", "crankbait", "silikon yem", "soft lure",
+    "karides silikon", "worm", "shad", "grub",
+    "metal jig", "casting jig", "slow jig", "micro jig",
+    "shore jig", "jig yem", "kasik", "spoon",
+    "spinner", "mepps", "doner yem",
+    "raglou", "kursun arkasi",
+    "gece sahte", "glow sahte", "uv sahte",
+    "jighead", "jig kafa",
+    # Lines
+    "ip misina", "orgu misina", "braid", "pe misina",
+    "fluorocarbon", "florokarbon", "fc leader",
+    "monofilament", "naylon misina", "shock leader",
+    # Terminal tackle
+    "igne", "hook", "treble", "uclu igne", "offset hook", "assist hook", "capari",
+    "klips", "snap", "firdondu", "split ring", "solid ring",
+    "kursun", "surf kursun", "samandira",
+    "rapala klips", "lure snap",
+    # Brands
+    "shimano", "daiwa", "rapala", "owner", "decoy", "mustad",
+    "savage gear", "major craft", "duel", "yo-zuri",
+    "fujin", "kendo", "remixon", "okuma",
+    "berkley", "lunker city", "fishus", "maria",
+    "blue blue", "duo", "strike pro", "river2sea", "hayabusa",
+    # Accessories
+    "canta", "balikci cantasi", "lure bag", "takim cantasi",
+    "takim kutusu", "lure box", "jig box",
+    "kepce", "landing net", "lip grip", "boga grip",
+    "kamis ayagi", "tripod", "rod pod",
+    "balik bulucu", "fish finder", "kafa lambasi",
+    "pense", "makas", "balik tartisi",
+    "makine yagi", "yedek makara",
+    # Clothing
+    "wader", "balikci cizmesi", "yagmurluk",
+    # Sets / combos
+    "olta seti", "olta takim", "hazir takim", "kombin",
 )
 
 
@@ -101,49 +413,56 @@ SEARCH_PATTERNS = (
     "/arama?search={query}",
     "/arama-sonuc?search={query}",
     "/index.php?route=product/search&search={query}",
+    "/search?q={query}",
+    "/search?keyword={query}",
+    "/?s={query}&post_type=product",
+    "/urunler?search={query}",
+    "/products?q={query}",
 )
 
 
+# ─── CATEGORY MAPPING ────────────────────────────────────────────────────────
+
 CATEGORY_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("lrf-kamislari", ("lrf kamış", "lrf kamis", "light game rod", "ajing rod", "rock fishing kamış", "0 5 7 gr", "1 8 gr")),
-    ("lrf-makineleri", ("lrf makine", "lrf makina", "1000 kafa", "2000 kafa", "2500 kafa", "light game reel", "ajing reel")),
+    ("lrf-kamislari", ("lrf kamis", "lrf kamisi", "light game rod", "ajing rod", "rock fishing kamis", "0 5 7 gr", "1 8 gr", "lrf rod")),
+    ("lrf-makineleri", ("lrf makine", "lrf makina", "1000 kafa", "2000 kafa", "2500 kafa", "light game reel", "ajing reel", "lrf reel")),
     ("ultra-light-ajing-ekipmanlari", ("ajing", "ultra light", "ultralight", "rock fishing", "light game", "mebaru")),
-    ("spin-kamislari", ("spin kamış", "spin kamis", "spinning kamış", "spinning kamis", "spin rod", "atarlı kamış", "atarli kamis")),
+    ("spin-kamislari", ("spin kamis", "spin kamisi", "spinning kamis", "spin rod", "atarli kamis")),
     ("spin-makineleri", ("spin makine", "spin makina", "spinning reel", "3000 kafa", "4000 kafa", "5000 kafa")),
-    ("surf-kamislari", ("surf kamış", "surf kamis", "surf casting kamış", "long cast kamış", "beach ledgering", "uzak atış kamış")),
+    ("surf-kamislari", ("surf kamis", "surf kamisi", "surf casting kamis", "long cast kamis", "beach ledgering", "uzak atis kamis")),
     ("surf-makineleri", ("surf makine", "surf makina", "long cast makine", "long cast makina", "baitrunner", "big pit")),
-    ("tekne-kamislari", ("tekne kamış", "tekne kamis", "boat rod", "bot kamış", "dip kamış")),
-    ("tekne-makineleri", ("tekne makine", "tekne makina", "boat reel", "çıkrık", "cikrik", "electric reel")),
-    ("jigging-kamislari", ("jigging kamış", "jigging kamis", "slow jig kamış", "vertical jig kamış", "jig rod")),
+    ("tekne-kamislari", ("tekne kamis", "tekne kamisi", "boat rod", "bot kamis", "dip kamis")),
+    ("tekne-makineleri", ("tekne makine", "tekne makina", "boat reel", "cikrik", "electric reel")),
+    ("jigging-kamislari", ("jigging kamis", "jigging kamisi", "slow jig kamis", "vertical jig kamis", "jig rod")),
     ("jigging-makineleri", ("jigging makine", "jigging makina", "slow jig makine", "high drag", "jigging reel")),
-    ("trolling-ekipmanlari", ("trolling", "sırtı", "sirti", "trolling kamış", "trolling makine", "downrigger")),
-    ("jig-kafalari-jighead", ("jighead", "jig head", "jig kafa", "jig kafası", "jig kafasi")),
+    ("trolling-ekipmanlari", ("trolling", "sirti", "trolling kamis", "trolling makine", "downrigger")),
+    ("jig-kafalari-jighead", ("jighead", "jig head", "jig kafa", "jig kafasi")),
     ("jig-yemler-metal-jigler", ("metal jig", "slow jig", "casting jig", "micro jig", "jig yem", "jig lure")),
-    ("shore-jigging-kasiklari", ("shore jig", "shore jigging", "shore jigging kaşık", "shore jigging kasik")),
-    ("kasiklar", ("kaşık", "kasik", "spoon", "döner kaşık", "doner kasik")),
-    ("spinner-yemler", ("spinner", "mepps", "döner yem", "doner yem")),
-    ("kursun-arkasi-sahteleri", ("kurşun arkası", "kursun arkasi", "raglou", "ragot")),
-    ("gece-avi-sahteleri", ("gece", "glow", "fosfor", "uv", "luminous", "ışıklı", "isikli")),
-    ("silikon-yemler", ("silikon", "soft lure", "soft bait", "worm", "karides", "shad", "grub", "creature")),
+    ("shore-jigging-kasiklari", ("shore jig", "shore jigging kasik")),
+    ("kasiklar", ("kasik", "kasigi", "spoon", "doner kasik")),
+    ("spinner-yemler", ("spinner", "mepps", "doner yem")),
+    ("kursun-arkasi-sahteleri", ("kursun arkasi", "raglou", "ragot")),
+    ("gece-avi-sahteleri", ("gece", "glow", "fosfor", "uv sahte", "luminous", "isikli")),
+    ("silikon-yemler", ("silikon", "soft lure", "soft bait", "worm", "karides", "shad", "grub", "creature", "slug")),
     ("lrf-sahteleri", ("lrf sahte", "lrf yem", "micro", "mikro", "mini jig", "lrf silikon")),
-    ("maket-baliklar-sahte-yemler", ("maket", "sahte", "rapala", "minnow", "jerk", "jerkbait", "pencil", "popper", "wobbler", "crankbait")),
-    ("lrf-takimlari", ("lrf takım", "lrf takim", "lrf set", "lrf kombin")),
-    ("hazir-olta-takimlari", ("hazır takım", "hazir takim", "olta set", "set olta", "kombin", "takım", "takim")),
+    ("maket-baliklar-sahte-yemler", ("maket", "sahte", "rapala", "minnow", "jerk", "jerkbait", "pencil", "popper", "wobbler", "crankbait", "floating", "sinking")),
+    ("lrf-takimlari", ("lrf takim", "lrf set", "lrf kombin")),
+    ("hazir-olta-takimlari", ("hazir takim", "olta set", "set olta", "kombin", "baslangic set")),
     ("fluorocarbon-misinalar", ("fluorocarbon", "florokarbon", "fc leader", "leader misina")),
-    ("ip-misinalar", ("ip misina", "örgü", "orgu", "braid", "braided", "pe ", "8x", "4x", "x8", "x4")),
-    ("monofilament-misinalar", ("monofilament", "mono misina", "naylon misina", "shock leader", "şok lider", "sok lider", "misina")),
-    ("igneler", ("iğne", "igne", "hook", "assist hook", "offset", "üçlü", "uclu", "treble", "çapari", "capari")),
+    ("ip-misinalar", ("ip misina", "orgu", "braid", "braided", "pe ", "8x", "4x", "x8", "x4")),
+    ("monofilament-misinalar", ("monofilament", "mono misina", "naylon misina", "shock leader", "sok lider", "misina")),
+    ("igneler", ("igne", "hook", "assist hook", "offset", "uclu", "treble", "capari", "calis")),
     ("rapala-klipsleri", ("rapala klips", "sahte klips", "lure snap")),
-    ("klipsler-ve-firdonduler", ("klips", "snap", "fırdöndü", "firdondu", "split ring", "solid ring", "halka")),
-    ("kursunlar-ve-samandiralar", ("kurşun", "kursun", "şamandıra", "samandira", "float", "lead", "gezer kurşun", "surf kurşun")),
-    ("kamis-ayaklari", ("kamış ayağı", "kamis ayagi", "tripod", "rod holder", "rod pod", "sehpa", "dayama")),
-    ("balikci-cantalari", ("çanta", "canta", "bag", "lure bag", "bel çantası", "sırt çantası", "takım çantası")),
-    ("takim-kutulari", ("takım kutusu", "takim kutusu", "lure box", "jig box", "organizer", "kutu")),
-    ("kepceler-ve-balik-tutucular", ("kepçe", "kepce", "landing net", "lip grip", "boga grip", "balık tutucu", "balik tutucu")),
-    ("balikci-giyim", ("wader", "çizme", "cizme", "yağmurluk", "yagmurluk", "eldiven", "şapka", "sapka", "polar", "giyim")),
-    ("elektronik-ve-aksesuarlar", ("balık bulucu", "balik bulucu", "fish finder", "kafa lambası", "kafa lambasi", "tartı", "tarti", "pense", "makas")),
-    ("bakim-ve-yedek-parcalar", ("makine yağı", "makine yagi", "bakım", "bakim", "yedek makara", "spare spool", "yedek parça", "yedek parca")),
-    ("olta-makineleri-genel", ("olta makinesi", "olta makinası", "olta makinasi", "reel", "makine", "makina")),
+    ("klipsler-ve-firdonduler", ("klips", "snap", "firdondu", "split ring", "solid ring", "halka")),
+    ("kursunlar-ve-samandiralar", ("kursun", "samandira", "float", "lead", "gezer kursun", "surf kursun")),
+    ("kamis-ayaklari", ("kamis ayagi", "tripod", "rod holder", "rod pod", "sehpa", "dayama")),
+    ("balikci-cantalari", ("canta", "bag", "lure bag", "bel cantasi", "sirt cantasi", "takim cantasi")),
+    ("takim-kutulari", ("takim kutusu", "lure box", "jig box", "organizer", "kutu")),
+    ("kepceler-ve-balik-tutucular", ("kepce", "landing net", "lip grip", "boga grip", "balik tutucu")),
+    ("balikci-giyim", ("wader", "cizme", "yagmurluk", "eldiven", "sapka", "polar", "giyim")),
+    ("elektronik-ve-aksesuarlar", ("balik bulucu", "fish finder", "kafa lambasi", "tarti", "pense", "makas")),
+    ("bakim-ve-yedek-parcalar", ("makine yagi", "bakim", "yedek makara", "spare spool", "yedek parca")),
+    ("olta-makineleri-genel", ("olta makinesi", "olta makinasi", "reel", "makine", "makina")),
 )
 
 
@@ -152,28 +471,59 @@ BRAND_HINTS = (
     "Owner", "Decoy", "Mustad", "Fujin", "Kendo", "Remixon", "Okuma", "Lineaeffe",
     "Lunker City", "Berkley", "Fishus", "Maria", "Duo", "Blue Blue", "Tubertini",
     "AlbaStar", "Captain", "Powerex", "Strike Pro", "River2Sea", "Hayabusa",
+    "Cormoran", "Illex", "Megabass", "Lucky Craft", "IMA", "Jackson", "Zenaq",
+    "Xesta", "Timon", "Varivas", "Toray", "Smith", "Jumprize", "CB One",
 )
 
+# Reel size set for variant token extraction
+_REEL_SIZES = frozenset(range(500, 30001, 500))
+_SIZE_RE = re.compile(r"\b(\d{3,5})\b")
+_TYPE_TOKENS = frozenset((
+    "lrf", "spin", "surf", "jigging", "jig", "trolling", "tekne",
+    "baitrunner", "feeder", "carp", "shore", "slow", "ultralight",
+))
 
 PRODUCT_CARD_SELECTORS = (
     ".productItem", ".product-item", ".product-list-item", ".showcase", ".showcase-container",
     ".catalogWrapper .item", ".prd", ".urun", ".urunItem", ".product", ".productBox",
     ".product-card", ".item-product", ".product-layout", ".product-grid", ".product-list",
     "li[class*='product']", "div[class*='Product']", "div[class*='urun']",
+    "article[class*='product']", ".catalog-item", ".grid-item",
 )
 
 TITLE_SELECTORS = (
     ".productName", ".product-name", ".showcase-title", ".prd-title", ".urunAdi",
     ".product-title", ".productDetailName", ".ProductName", ".name", ".title",
-    "[itemprop='name']", "[class*='name']", "[class*='title']", "h1", "h2", "h3", "a[title]",
+    "[itemprop='name']", "[class*='name']", "[class*='title']", "h1", "h2", "h3",
+    "a[title]", ".item-name",
 )
 
 PRICE_SELECTORS = (
     ".productPrice", ".product-price", ".showcase-price", ".price", ".current-price",
     ".discountedPrice", ".salePrice", ".urunFiyat", ".productDetailPrice", ".Price",
-    "[itemprop='price']", "[class*='price']", "[class*='Price']", "meta[property='product:price:amount']",
+    "[itemprop='price']", "[class*='price']", "[class*='Price']",
+    "meta[property='product:price:amount']", ".new-price", ".final-price",
 )
 
+
+# ─── VARIANT TOKEN EXTRACTION ─────────────────────────────────────────────────
+
+def extract_variant_tokens(title: str) -> frozenset[str]:
+    """Return size/type tokens that distinguish product variants (1000 vs 4000, LRF vs Spin)."""
+    norm = normalize_text(title)
+    tokens: set[str] = set()
+    for m in _SIZE_RE.finditer(norm):
+        val = int(m.group(1))
+        if val in _REEL_SIZES:
+            tokens.add(f"sz{val}")
+    words = set(norm.split())
+    for kw in _TYPE_TOKENS:
+        if kw in words:
+            tokens.add(kw)
+    return frozenset(tokens)
+
+
+# ─── UTILITY ─────────────────────────────────────────────────────────────────
 
 def require_supabase() -> Client:
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -213,7 +563,8 @@ def parse_price(raw_price: str) -> float | None:
     elif number.count(".") > 1:
         number = number.replace(".", "")
     try:
-        return round(float(number), 2)
+        price = round(float(number), 2)
+        return price if price > 0 else None
     except ValueError:
         return None
 
@@ -228,7 +579,10 @@ def absolute_url(base_url: str, value: str | None) -> str | None:
 
 def clean_title(value: str) -> str:
     value = re.sub(r"\s+", " ", value or "").strip()
-    value = re.sub(r"\b(stokta|sepete ekle|incele|favorilere ekle)\b", "", value, flags=re.IGNORECASE)
+    value = re.sub(
+        r"\b(stokta|sepete ekle|incele|favorilere ekle|hemen al|satin al|urun kodu|ürün kodu)\b",
+        "", value, flags=re.IGNORECASE,
+    )
     return re.sub(r"\s+", " ", value).strip(" -|/")
 
 
@@ -269,7 +623,10 @@ def select_text(card: Tag, selectors: Iterable[str]) -> str | None:
 
 
 def select_product_url(base_url: str, card: Tag) -> str | None:
-    preferred = card.select_one("a[href*='urun'], a[href*='product'], a[href*='p-'], a[href]")
+    preferred = card.select_one(
+        "a[href*='urun'], a[href*='product'], a[href*='p-'], "
+        "a[href*='shop'], a[href*='item'], a[href]"
+    )
     if preferred and preferred.get("href"):
         return absolute_url(base_url, str(preferred.get("href")))
     return None
@@ -279,25 +636,117 @@ def select_image_url(base_url: str, card: Tag) -> str | None:
     image = card.select_one("img")
     if not image:
         return None
-    for attr in ("data-src", "data-original", "data-lazy", "src"):
-        image_url = absolute_url(base_url, str(image.get(attr) or ""))
-        if image_url:
-            return image_url
+    for attr in ("data-src", "data-original", "data-lazy", "data-zoom-image", "src"):
+        val = image.get(attr)
+        if val and not str(val).startswith("data:"):
+            url = absolute_url(base_url, str(val))
+            if url:
+                return url
     return None
 
 
+# ─── JSON-LD & OPEN GRAPH EXTRACTION ─────────────────────────────────────────
+
+def extract_json_ld_product(soup: BeautifulSoup) -> dict | None:
+    """Extract product data from schema.org JSON-LD — the most reliable source."""
+    for script in soup.find_all("script", {"type": "application/ld+json"}):
+        try:
+            data = json.loads(script.string or "")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        items: list[dict] = []
+        if isinstance(data, dict):
+            if data.get("@type") == "Product":
+                items = [data]
+            elif "@graph" in data:
+                items = [x for x in data["@graph"] if isinstance(x, dict) and x.get("@type") == "Product"]
+        elif isinstance(data, list):
+            items = [x for x in data if isinstance(x, dict) and x.get("@type") == "Product"]
+
+        for item in items:
+            name = str(item.get("name") or "").strip()
+            if not name:
+                continue
+            price_val: float | None = None
+            offers = item.get("offers") or {}
+            if isinstance(offers, list):
+                offers = offers[0] if offers else {}
+            price_raw = offers.get("price") or offers.get("lowPrice") or ""
+            if price_raw:
+                price_val = parse_price(str(price_raw))
+            if price_val is None:
+                continue
+            # Image
+            image_raw = item.get("image")
+            image_url: str | None = None
+            if isinstance(image_raw, str):
+                image_url = image_raw
+            elif isinstance(image_raw, list) and image_raw:
+                image_url = str(image_raw[0])
+            elif isinstance(image_raw, dict):
+                image_url = str(image_raw.get("url") or "")
+            # Brand
+            brand_raw = item.get("brand")
+            brand: str | None = None
+            if isinstance(brand_raw, dict):
+                brand = str(brand_raw.get("name") or "")
+            elif isinstance(brand_raw, str):
+                brand = brand_raw
+            return {
+                "name": clean_title(name),
+                "price": price_val,
+                "image_url": image_url or None,
+                "brand": brand or None,
+            }
+    return None
+
+
+def extract_open_graph(soup: BeautifulSoup) -> dict | None:
+    """Fallback: extract product info from Open Graph / product meta tags."""
+    title_tag = soup.select_one("meta[property='og:title']") or soup.select_one("meta[name='title']")
+    price_tag = (
+        soup.select_one("meta[property='product:price:amount']")
+        or soup.select_one("meta[property='og:price:amount']")
+    )
+    image_tag = soup.select_one("meta[property='og:image']")
+
+    name = str(title_tag.get("content") or "").strip() if title_tag else ""
+    price_val = parse_price(str(price_tag.get("content") or "")) if price_tag else None
+    image_url = str(image_tag.get("content") or "") if image_tag else None
+
+    if name and price_val is not None:
+        return {
+            "name": clean_title(name),
+            "price": price_val,
+            "image_url": image_url or None,
+            "brand": None,
+        }
+    return None
+
+
+# ─── NETWORKING ──────────────────────────────────────────────────────────────
+
 def fetch_html(url: str) -> str | None:
-    try:
-        response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=REQUEST_TIMEOUT_SECONDS)
-        response.raise_for_status()
-        content_type = response.headers.get("Content-Type", "")
-        if "text/html" not in content_type and "xml" not in content_type and "text/plain" not in content_type:
-            LOGGER.warning("Skipping non-HTML response from %s", url)
-            return None
-        return response.text
-    except requests.RequestException as exc:
-        LOGGER.warning("Could not fetch %s: %s", url, exc)
-        return None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.get(
+                url, headers=HEADERS, timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=True,
+            )
+            response.raise_for_status()
+            ct = response.headers.get("Content-Type", "")
+            if "text/html" not in ct and "xml" not in ct and "text/plain" not in ct:
+                return None
+            return response.text
+        except requests.exceptions.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else 0
+            if status in (404, 410, 403, 401):
+                return None
+            LOGGER.warning("HTTP %s from %s (attempt %d/%d)", status, url, attempt, MAX_RETRIES)
+        except requests.RequestException as exc:
+            LOGGER.warning("Request failed %s: %s (attempt %d/%d)", url, exc, attempt, MAX_RETRIES)
+        if attempt < MAX_RETRIES:
+            time.sleep(RETRY_BACKOFF ** attempt)
+    return None
 
 
 def same_domain(base_url: str, candidate_url: str) -> bool:
@@ -307,26 +756,35 @@ def same_domain(base_url: str, candidate_url: str) -> bool:
 
 
 def is_likely_product_url(url: str) -> bool:
-    normalized = normalize_text(urlparse(url).path.replace("-", " ").replace("/", " "))
+    path = urlparse(url).path
+    segments = [s for s in path.split("/") if s and len(s) > 2]
+    if not segments:
+        return False
+    normalized = normalize_text(path.replace("-", " ").replace("/", " "))
     product_terms = (
-        "urun", "product", "p", "olta", "rapala", "sahte", "jig", "kam", "misina",
-        "makine", "klips", "canta", "lrf", "spin", "igne", "kasik"
+        "urun", "product", "olta", "rapala", "sahte", "jig", "kam",
+        "misina", "makine", "klips", "canta", "lrf", "spin", "igne",
+        "kasik", "silikon", "kursun", "shimano", "daiwa",
     )
-    blocked_terms = ("sepet", "cart", "hesap", "account", "login", "uye", "iletisim", "blog", "haber")
-    return any(term in normalized for term in product_terms) and not any(term in normalized for term in blocked_terms)
+    blocked_terms = (
+        "sepet", "cart", "hesap", "account", "login", "uye", "iletisim",
+        "blog", "haber", "hakkimizda", "about", "contact", "tag", "etiket",
+    )
+    return (
+        any(term in normalized for term in product_terms)
+        and not any(term in normalized for term in blocked_terms)
+    )
 
 
 def paginated_variants(url: str) -> list[str]:
     urls = [url]
     separator = "&" if "?" in url else "?"
     for page in range(2, MAX_PAGES_PER_QUERY + 1):
-        urls.extend(
-            [
-                f"{url}{separator}page={page}",
-                f"{url}{separator}sayfa={page}",
-                f"{url}{separator}p={page}",
-            ]
-        )
+        urls.extend([
+            f"{url}{separator}page={page}",
+            f"{url}{separator}sayfa={page}",
+            f"{url}{separator}p={page}",
+        ])
     return urls
 
 
@@ -335,9 +793,9 @@ def build_search_urls(target: StoreTarget) -> list[str]:
     for seed_url in target.urls:
         urls.extend(paginated_variants(seed_url))
     for keyword in SEARCH_KEYWORDS:
-        encoded_query = quote_plus(keyword)
+        encoded = quote_plus(keyword)
         for pattern in SEARCH_PATTERNS:
-            search_url = urljoin(target.base_url, pattern.format(query=encoded_query))
+            search_url = urljoin(target.base_url, pattern.format(query=encoded))
             urls.extend(paginated_variants(search_url))
     deduped = list(dict.fromkeys(urls))
     return deduped[:MAX_SEARCH_URLS_PER_STORE]
@@ -359,6 +817,7 @@ def discover_sitemap_product_urls(target: StoreTarget) -> list[str]:
         urljoin(target.base_url, "/sitemap_index.xml"),
         urljoin(target.base_url, "/sitemap-products.xml"),
         urljoin(target.base_url, "/sitemap_product.xml"),
+        urljoin(target.base_url, "/sitemap-1.xml"),
     )
     discovered: list[str] = []
     for sitemap_url in sitemap_candidates:
@@ -387,24 +846,57 @@ def discover_sitemap_product_urls(target: StoreTarget) -> list[str]:
             break
     deduped = list(dict.fromkeys(discovered))[:MAX_SITEMAP_URLS_PER_STORE]
     if deduped:
-        LOGGER.info("Discovered %s likely product URLs from sitemap for %s", len(deduped), target.name)
+        LOGGER.info("Discovered %s product URLs from sitemap for %s", len(deduped), target.name)
     return deduped
 
 
+# ─── PAGE PARSING ────────────────────────────────────────────────────────────
+
 def parse_product_detail_page(store_name: str, url: str, html: str) -> ParsedListing | None:
     soup = BeautifulSoup(html, "html.parser")
-    title = clean_title(
-        select_text(soup, TITLE_SELECTORS)
-        or select_text(soup, ("meta[property='og:title']", "meta[name='title']"))
-        or ""
-    )
+
+    # 1. JSON-LD (most reliable — schema.org Product markup)
+    ld = extract_json_ld_product(soup)
+    if ld:
+        brand = ld["brand"] or infer_brand(ld["name"])
+        img = ld["image_url"]
+        if not img:
+            og_img = soup.select_one("meta[property='og:image']")
+            img = str(og_img.get("content")) if og_img and og_img.get("content") else None
+        return ParsedListing(
+            store_name=store_name,
+            raw_title=ld["name"],
+            brand=brand,
+            price=ld["price"],
+            product_url=url,
+            image_url=img,
+            category_slug=categorize_title(ld["name"]),
+        )
+
+    # 2. Open Graph meta
+    og = extract_open_graph(soup)
+    if og:
+        brand = og["brand"] or infer_brand(og["name"])
+        return ParsedListing(
+            store_name=store_name,
+            raw_title=og["name"],
+            brand=brand,
+            price=og["price"],
+            product_url=url,
+            image_url=og["image_url"],
+            category_slug=categorize_title(og["name"]),
+        )
+
+    # 3. CSS selector fallback
+    title = clean_title(select_text(soup, TITLE_SELECTORS) or "")
     price = parse_price(select_text(soup, PRICE_SELECTORS) or "")
-    image_url = None
+    image_url: str | None = None
     image_meta = soup.select_one("meta[property='og:image'], meta[name='twitter:image']")
     if image_meta and image_meta.get("content"):
         image_url = absolute_url(url, str(image_meta.get("content")))
     if not image_url:
         image_url = select_image_url(url, soup)
+
     if not title or price is None:
         return None
     return ParsedListing(
@@ -420,10 +912,19 @@ def parse_product_detail_page(store_name: str, url: str, html: str) -> ParsedLis
 
 def parse_store_page(store_name: str, url: str, html: str) -> list[ParsedListing]:
     soup = BeautifulSoup(html, "html.parser")
+
+    # If og:type=product, treat as single product page
+    og_type = soup.select_one("meta[property='og:type']")
+    if og_type and str(og_type.get("content") or "").lower() == "product":
+        result = parse_product_detail_page(store_name, url, html)
+        return [result] if result else []
+
+    # Listing page: parse product cards
     cards: list[Tag] = []
     for selector in PRODUCT_CARD_SELECTORS:
         cards.extend([node for node in soup.select(selector) if isinstance(node, Tag)])
     unique_cards = list(dict.fromkeys(cards))
+
     listings: list[ParsedListing] = []
     for card in unique_cards:
         raw_title = clean_title(select_text(card, TITLE_SELECTORS) or "")
@@ -446,6 +947,8 @@ def parse_store_page(store_name: str, url: str, html: str) -> list[ParsedListing
     return listings
 
 
+# ─── PRODUCT MATCHING ────────────────────────────────────────────────────────
+
 def load_categories(client: Client) -> dict[str, int]:
     response = client.table("categories").select("id, slug").execute()
     return {row["slug"]: row["id"] for row in response.data or []}
@@ -465,20 +968,36 @@ def listing_match_key(listing: ParsedListing) -> str:
 
 
 def find_matching_product(listing: ParsedListing, products: list[dict]) -> dict | None:
-    target = listing_match_key(listing)
-    if not target or not products:
+    target_key = listing_match_key(listing)
+    listing_tokens = extract_variant_tokens(listing.raw_title)
+
+    if not target_key or not products:
         return None
-    key_to_product = {product_match_key(product): product for product in products}
-    candidate_keys = get_close_matches(target, key_to_product.keys(), n=5, cutoff=MATCH_CONFIDENCE)
+
+    # Pre-filter: only consider products with compatible variant tokens
+    compatible: dict[str, dict] = {}
+    for product in products:
+        prod_tokens = extract_variant_tokens(product.get("title", ""))
+        # Reject if both sides have tokens but they differ
+        if listing_tokens and prod_tokens and not (listing_tokens & prod_tokens):
+            continue
+        compatible[product_match_key(product)] = product
+
+    if not compatible:
+        return None
+
+    candidate_keys = get_close_matches(target_key, compatible.keys(), n=5, cutoff=MATCH_CONFIDENCE)
     if candidate_keys:
-        return key_to_product[candidate_keys[0]]
+        return compatible[candidate_keys[0]]
+
     best_product: dict | None = None
     best_score = 0.0
-    for product in products:
-        score = SequenceMatcher(None, target, product_match_key(product)).ratio()
+    for key, product in compatible.items():
+        score = SequenceMatcher(None, target_key, key).ratio()
         if score > best_score:
             best_score = score
             best_product = product
+
     return best_product if best_score >= MATCH_CONFIDENCE else None
 
 
@@ -521,7 +1040,9 @@ def upsert_listing(client: Client, product_id: int, listing: ParsedListing) -> N
     client.table("store_listings").upsert(payload, on_conflict="store_name,product_url").execute()
 
 
-def save_listing(client: Client, listing: ParsedListing, categories: dict[str, int], products: list[dict]) -> None:
+def save_listing(
+    client: Client, listing: ParsedListing, categories: dict[str, int], products: list[dict]
+) -> None:
     product = find_matching_product(listing, products)
     if product is None:
         product = create_product(client, listing, categories)
@@ -529,14 +1050,18 @@ def save_listing(client: Client, listing: ParsedListing, categories: dict[str, i
     upsert_listing(client, int(product["id"]), listing)
 
 
-def crawl_store(client: Client, target: StoreTarget, categories: dict[str, int], products: list[dict]) -> int:
+# ─── CRAWL ───────────────────────────────────────────────────────────────────
+
+def crawl_store(
+    client: Client, target: StoreTarget, categories: dict[str, int], products: list[dict]
+) -> int:
     saved_count = 0
     seen_page_urls: set[str] = set()
     seen_listing_urls: set[str] = set()
     discovered_detail_urls: list[str] = []
 
     search_urls = build_search_urls(target)
-    LOGGER.info("Crawling %s with up to %s search/category URLs", target.name, len(search_urls))
+    LOGGER.info("Crawling %s — %s search/category URLs queued", target.name, len(search_urls))
 
     for page_url in search_urls:
         if page_url in seen_page_urls:
@@ -565,7 +1090,7 @@ def crawl_store(client: Client, target: StoreTarget, categories: dict[str, int],
 
     sitemap_urls = discover_sitemap_product_urls(target)
     detail_urls = list(dict.fromkeys([*discovered_detail_urls, *sitemap_urls]))[:MAX_DETAIL_URLS_PER_STORE]
-    LOGGER.info("Crawling %s with up to %s discovered product detail URLs", target.name, len(detail_urls))
+    LOGGER.info("Crawling %s — %s discovered detail URLs", target.name, len(detail_urls))
 
     for detail_url in detail_urls:
         if detail_url in seen_listing_urls or detail_url in seen_page_urls:
@@ -585,7 +1110,7 @@ def crawl_store(client: Client, target: StoreTarget, categories: dict[str, int],
             LOGGER.exception("Could not save detail listing %s: %s", detail_url, exc)
         time.sleep(REQUEST_DELAY_SECONDS)
 
-    LOGGER.info("Finished %s. Saved or updated %s unique listings.", target.name, saved_count)
+    LOGGER.info("Finished %s — saved/updated %s unique listings.", target.name, saved_count)
     return saved_count
 
 
@@ -593,10 +1118,17 @@ def scrape_all() -> None:
     client = require_supabase()
     categories = load_categories(client)
     products = load_products(client)
+    LOGGER.info(
+        "Starting scrape: %s stores | %s categories | %s products in DB",
+        len(STORE_TARGETS), len(categories), len(products),
+    )
     total_saved = 0
     for target in STORE_TARGETS:
-        total_saved += crawl_store(client, target, categories, products)
-    LOGGER.info("Scraping complete. Saved or updated %s listings.", total_saved)
+        try:
+            total_saved += crawl_store(client, target, categories, products)
+        except Exception as exc:
+            LOGGER.exception("Store %s failed: %s", target.name, exc)
+    LOGGER.info("Scraping complete — saved/updated %s listings total.", total_saved)
 
 
 if __name__ == "__main__":
