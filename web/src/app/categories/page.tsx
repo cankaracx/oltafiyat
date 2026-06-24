@@ -1,31 +1,80 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { categories } from "@/lib/categories";
+import { mainCategories, categories, categoryIconMap } from "@/lib/categories";
 
 export const metadata: Metadata = {
-  title: "Kategoriler",
-  description: "LRF sahteleri, spin kamışları, ip misinalar ve diğer balık avı kategorilerinde fiyat karşılaştırın."
+  title: "Balıkçılık Kategorileri",
+  description: "LRF, Spin, Surf, Jigging, Tekne avı malzemeleri, suni yemler ve aksesuarlarda fiyat karşılaştırın."
 };
 
 export default function CategoriesPage() {
   return (
-    <section className="container-shell py-10">
-      <div className="mb-6 border-b border-[#d0d7de] pb-4">
-        <div className="gh-label mb-3">Kategori indexi</div>
-        <h1 className="text-3xl font-semibold tracking-tight text-[#24292f]">Balık avı kategorileri</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-[#57606a]">
-          Mağaza menülerine yakın kategori yapısı: kamışlar, makineler, yemler, misinalar ve aksesuarlar ayrı tutulur.
+    <section className="container-shell py-8">
+      <div className="mb-8">
+        <span className="badge-label mb-3 inline-block">Kategori Dizini</span>
+        <h1 className="text-3xl font-extrabold tracking-tight text-[#1c2128]">Balıkçılık Kategorileri</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#57606a]">
+          Ana av stillerine göre filtrele. Spin, LRF, Surf veya Jigging için özelleşmiş kamış,
+          makine, yem ve aksesuar kategorilerinden karşılaştır.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {categories.map((category) => (
-          <Link key={category.slug} href={`/categories/${category.slug}`} className="gh-panel block p-4 hover:border-[#0969da]">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#57606a]">/{category.slug}</div>
-            <h2 className="text-base font-semibold text-[#0969da]">{category.name}</h2>
-            <p className="mt-2 text-sm leading-6 text-[#57606a]">{category.description}</p>
-          </Link>
-        ))}
+      <div className="grid gap-5 md:grid-cols-2">
+        {mainCategories.map((main) => {
+          const subs = categories.filter((c) => c.parentSlug === main.slug);
+          const Icon = categoryIconMap[main.iconName as keyof typeof categoryIconMap];
+
+          return (
+            <div
+              key={main.slug}
+              className="panel flex flex-col justify-between hover:shadow-md hover:border-[#0969da]/40 transition-all"
+            >
+              {/* Header */}
+              <div className="flex items-start gap-4 p-5 border-b border-[#e8ecf0]">
+                <div className="shrink-0 rounded-xl bg-[#f6f8fa] border border-[#e8ecf0] p-3">
+                  <Icon size={22} className="text-[#57606a]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <Link
+                    href={`/categories/${main.slug}`}
+                    className="text-lg font-bold text-[#0969da] hover:underline"
+                  >
+                    {main.name}
+                  </Link>
+                  <p className="mt-0.5 text-xs text-[#57606a] leading-relaxed">{main.description}</p>
+                </div>
+              </div>
+
+              {/* Sub-categories */}
+              <div className="p-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#57606a] mb-2.5">
+                  Alt Kategoriler ({subs.length})
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {subs.map((sub) => (
+                    <Link
+                      key={sub.slug}
+                      href={`/categories/${main.slug}?sub=${sub.slug}`}
+                      className="badge hover:badge-blue transition-colors"
+                    >
+                      {sub.name}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+
+              {/* CTA */}
+              <div className="px-4 pb-4">
+                <Link
+                  href={`/categories/${main.slug}`}
+                  className="btn btn-primary w-full justify-center"
+                >
+                  Tüm {main.name} Ürünleri →
+                </Link>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
