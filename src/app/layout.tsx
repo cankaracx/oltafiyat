@@ -2,13 +2,31 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 
+// VERCEL_ENV is "production" only on the main prod deployment; "preview" on branch/PR deploys
+const isProduction = process.env.VERCEL_ENV === "production";
+
+const defaultTitle = "OltaFiyat | Türkiye Balık Avı Fiyat Karşılaştırma";
+const defaultDescription =
+  "Türkiye'deki balık avı mağazalarında kamış, makine, sahte yem, misina ve aksesuar fiyatlarını karşılaştırın.";
+
 export const metadata: Metadata = {
-  title: {
-    default: "OltaFiyat | Türkiye Balık Avı Fiyat Karşılaştırma",
-    template: "%s | OltaFiyat"
+  title: { default: defaultTitle, template: "%s | OltaFiyat" },
+  description: defaultDescription,
+  metadataBase: new URL("https://oltafiyat.com"),
+  robots: isProduction ? { index: true, follow: true } : { index: false, follow: false },
+  openGraph: {
+    type: "website",
+    locale: "tr_TR",
+    url: "https://oltafiyat.com",
+    siteName: "OltaFiyat",
+    title: defaultTitle,
+    description: defaultDescription
   },
-  description: "Türkiye'deki balık avı mağazalarında kamış, makine, sahte yem, misina ve aksesuar fiyatlarını karşılaştırın.",
-  metadataBase: new URL("https://oltafiyat.com")
+  twitter: {
+    card: "summary",
+    title: defaultTitle,
+    description: defaultDescription
+  }
 };
 
 const navItems = [
@@ -51,7 +69,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <div>
               <div className="mb-3 text-base font-semibold text-[#24292f]">OltaFiyat</div>
               <p className="max-w-md text-sm leading-6 text-[#57606a]">
-                Balık avı ürünleri için mağaza fiyatlarını izleyen bağımsız karşılaştırma paneli. Fiyatı gör, mağazayı aç, satın almadan önce son stok ve fiyatı kontrol et.
+                Balık avı ürünleri için mağaza fiyatlarını izleyen bağımsız karşılaştırma platformu. En düşük fiyatı gör, mağazaya git, doğrudan mağazadan satın al.
               </p>
             </div>
             <div>

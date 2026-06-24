@@ -1,5 +1,32 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { formatTRY } from "@/lib/format";
+
+export const metadata: Metadata = {
+  title: "OltaFiyat | Türkiye Balık Avı Fiyat Karşılaştırma",
+  description: "Kamış, makine, sahte yem, misina ve aksesuar fiyatlarını 16+ Türk balıkçılık mağazasında karşılaştırın.",
+  openGraph: {
+    title: "OltaFiyat | Türkiye Balık Avı Fiyat Karşılaştırma",
+    description: "Kamış, makine, sahte yem, misina ve aksesuar fiyatlarını 16+ Türk balıkçılık mağazasında karşılaştırın.",
+    url: "https://oltafiyat.com"
+  }
+};
+
+const websiteSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "OltaFiyat",
+  url: "https://oltafiyat.com",
+  description: "Türkiye balık avı ürünlerinde fiyat karşılaştırma platformu.",
+  potentialAction: {
+    "@type": "SearchAction",
+    target: {
+      "@type": "EntryPoint",
+      urlTemplate: "https://oltafiyat.com/search?q={search_term_string}"
+    },
+    "query-input": "required name=search_term_string"
+  }
+};
 
 const featuredDrops = [
   {
@@ -37,6 +64,10 @@ const stats = [
 export default function HomePage() {
   return (
     <div>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+      />
       <section className="border-b border-[#d0d7de] bg-white">
         <div className="container-shell py-12">
           <div className="mb-4 inline-flex border border-[#d0d7de] bg-[#f6f8fa] px-2 py-1 text-xs font-semibold text-[#57606a]">
