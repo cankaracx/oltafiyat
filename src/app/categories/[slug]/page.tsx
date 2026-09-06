@@ -36,6 +36,7 @@ async function getCategoryProducts(
   const supabase = getSupabaseClient();
   const empty = { products: [], catName: "", catDesc: "", mainCat: undefined, activeSubSlug: null, totalCount: 0 };
   if (!supabase) return empty;
+  const db = supabase;
 
   let mainCat = mainCategories.find((c) => c.slug === slug);
   let subCat  = categories.find((c) => c.slug === slug);
@@ -60,7 +61,7 @@ async function getCategoryProducts(
 
   if (!targetSlugs.length) return { ...empty, catName, catDesc, mainCat, activeSubSlug };
 
-  const { data: cats } = await supabase.from("categories").select("id, slug").in("slug", targetSlugs);
+  const { data: cats } = await db.from("categories").select("id, slug").in("slug", targetSlugs);
   const catIds = cats?.map((c) => c.id) ?? [];
   if (!catIds.length) return { ...empty, catName, catDesc, mainCat, activeSubSlug };
 
@@ -71,7 +72,7 @@ async function getCategoryProducts(
     const out: StoreListingRow[] = [];
     for (let i = 0; i < productIds.length; i += 100) {
       const batch = productIds.slice(i, i + 100);
-      const { data: listData } = await supabase
+      const { data: listData } = await db
         .from("store_listings")
         .select(listingSelect)
         .in("product_id", batch)
@@ -94,7 +95,7 @@ async function getCategoryProducts(
   }
 
   if (sort === "newest") {
-    const { data: prods, count } = await supabase
+    const { data: prods, count } = await db
       .from("products")
       .select("id, title, brand, category_id, slug, created_at", { count: "exact" })
       .in("category_id", catIds)
@@ -116,7 +117,7 @@ async function getCategoryProducts(
     };
   }
 
-  const { data: allProds, count } = await supabase
+  const { data: allProds, count } = await db
     .from("products")
     .select("id, title, brand, category_id, slug, created_at", { count: "exact" })
     .in("category_id", catIds);
