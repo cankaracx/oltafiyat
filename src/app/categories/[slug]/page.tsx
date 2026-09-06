@@ -65,39 +65,82 @@ async function getCategoryProducts(
   if (!catIds.length) return { ...empty, catName, catDesc, mainCat, activeSubSlug };
 
   const from = (page - 1) * PAGE_SIZE;
-  const { data: prods, count } = await supabase
+  const listingSelect = "id, product_id, store_name, raw_title, price, product_url, image_url, updated_at";
+
+  async function listingsFor(productIds: number[]): Promise<StoreListingRow[]> {
+    const out: StoreListingRow[] = [];
+    for (let i = 0; i < productIds.length; i += 100) {
+      const batch = productIds.slice(i, i + 100);
+      const { data: listData } = await supabase
+        .from("store_listings")
+        .select(listingSelect)
+        .in("product_id", batch)
+        .order("price", { ascending: true });
+      out.push(...((listData ?? []) as StoreListingRow[]));
+    }
+    return out;
+  }
+
+  function mergeProducts(products: ProductRow[], listings: StoreListingRow[]): ProductWithLowest[] {
+    return products.map((p) => {
+      const pl = listings.filter((l) => l.product_id === p.id);
+      return {
+        ...p,
+        lowestPrice: pl[0]?.price ?? null,
+        listingCount: pl.length,
+        image_url: pl.find((l) => l.image_url)?.image_url ?? null
+      };
+    });
+  }
+
+  if (sort === "newest") {
+    const { data: prods, count } = await supabase
+      .from("products")
+      .select("id, title, brand, category_id, slug, created_at", { count: "exact" })
+      .in("category_id", catIds)
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+
+    const products = (prods ?? []) as ProductRow[];
+    const totalCount = count ?? 0;
+    if (!products.length) return { products: [], catName, catDesc, mainCat, activeSubSlug, totalCount };
+
+    const listings = await listingsFor(products.map((p) => p.id));
+    return {
+      products: mergeProducts(products, listings),
+      catName,
+      catDesc,
+      mainCat,
+      activeSubSlug,
+      totalCount
+    };
+  }
+
+  const { data: allProds, count } = await supabase
     .from("products")
     .select("id, title, brand, category_id, slug, created_at", { count: "exact" })
-    .in("category_id", catIds)
-    .order("created_at", { ascending: false })
-    .range(from, from + PAGE_SIZE - 1);
+    .in("category_id", catIds);
 
-  const products = prods ?? [];
-  const totalCount = count ?? 0;
+  const products = (allProds ?? []) as ProductRow[];
+  const totalCount = count ?? products.length;
   if (!products.length) return { products: [], catName, catDesc, mainCat, activeSubSlug, totalCount };
 
-  const { data: listData } = await supabase
-    .from("store_listings")
-    .select("id, product_id, store_name, raw_title, price, product_url, image_url, updated_at")
-    .in("product_id", products.map((p) => p.id))
-    .order("price", { ascending: true });
-
-  const listings = (listData ?? []) as StoreListingRow[];
-
-  let merged: ProductWithLowest[] = products.map((p) => {
-    const pl = listings.filter((l) => l.product_id === p.id);
-    return {
-      ...p,
-      lowestPrice: pl[0]?.price ?? null,
-      listingCount: pl.length,
-      image_url: pl.find((l) => l.image_url)?.image_url ?? null
-    };
+  const listings = await listingsFor(products.map((p) => p.id));
+  const merged = mergeProducts(products, listings);
+  merged.sort((a, b) => {
+    const left = a.lowestPrice ?? Infinity;
+    const right = b.lowestPrice ?? Infinity;
+    return sort === "price_desc" ? right - left : left - right;
   });
 
-  if (sort === "price_asc") merged.sort((a, b) => (a.lowestPrice ?? Infinity) - (b.lowestPrice ?? Infinity));
-  else if (sort === "price_desc") merged.sort((a, b) => (b.lowestPrice ?? -Infinity) - (a.lowestPrice ?? -Infinity));
-
-  return { products: merged, catName, catDesc, mainCat, activeSubSlug, totalCount };
+  return {
+    products: merged.slice(from, from + PAGE_SIZE),
+    catName,
+    catDesc,
+    mainCat,
+    activeSubSlug,
+    totalCount
+  };
 }
 
 const SORT_OPTIONS = [

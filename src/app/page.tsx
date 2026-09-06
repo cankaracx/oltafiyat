@@ -48,60 +48,75 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
   const fallback = { featured: [], stats: { productCount: 0, storeCount: 0, listingCount: 0 } };
   if (!supabase) return fallback;
 
-  const [listingsRes, productsRes] = await Promise.all([
+  const [productCountRes, listingCountRes, listingsRes] = await Promise.all([
+    supabase.from("products").select("id", { count: "exact", head: true }),
+    supabase.from("store_listings").select("id", { count: "exact", head: true }),
     supabase
       .from("store_listings")
-      .select("id, product_id, store_name, price, image_url, updated_at"),
-    supabase
-      .from("products")
-      .select("id, title, brand")
-      .order("created_at", { ascending: false })
-      .limit(200)
+      .select("id, product_id, store_name, price, image_url")
+      .order("updated_at", { ascending: false })
+      .limit(1000)
   ]);
 
   const listings = listingsRes.data ?? [];
-  const products = productsRes.data ?? [];
+  const productCount = productCountRes.count ?? 0;
+  const listingCount = listingCountRes.count ?? listings.length;
 
-  if (listings.length === 0 || products.length === 0) return fallback;
+  if (listings.length === 0) {
+    return {
+      featured: [],
+      stats: { productCount, storeCount: 0, listingCount }
+    };
+  }
 
   const storeNames = new Set(listings.map((l) => l.store_name));
-
-  const productMap = new Map(products.map((p) => [p.id, p]));
   const listingsByProduct = new Map<number, typeof listings>();
   for (const l of listings) {
     if (!listingsByProduct.has(l.product_id)) listingsByProduct.set(l.product_id, []);
     listingsByProduct.get(l.product_id)!.push(l);
   }
 
-  const ranked = [...listingsByProduct.entries()]
+  const topProductIds = Array.from(listingsByProduct.entries())
     .filter(([, ls]) => ls.length >= 2)
     .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 6);
+    .slice(0, 12)
+    .map(([id]) => id);
 
-  const featured: FeaturedProduct[] = ranked.map(([productId, ls]) => {
-    const sorted = [...ls].sort((a, b) => a.price - b.price);
-    const lowest = sorted[0];
+  const stats: SiteStats = {
+    productCount: productCount || listingsByProduct.size,
+    storeCount: storeNames.size,
+    listingCount
+  };
+
+  if (topProductIds.length === 0) return { featured: [], stats };
+
+  const productsRes = await supabase
+    .from("products")
+    .select("id, title, brand")
+    .in("id", topProductIds);
+
+  const productMap = new Map((productsRes.data ?? []).map((p) => [p.id, p]));
+
+  const featured: FeaturedProduct[] = [];
+  for (let i = 0; i < topProductIds.length && featured.length < 6; i++) {
+    const productId = topProductIds[i];
     const prod = productMap.get(productId);
-    const img = ls.find((l) => l.image_url)?.image_url ?? null;
-    return {
+    if (!prod) continue;
+    const ls = listingsByProduct.get(productId);
+    if (!ls || ls.length === 0) continue;
+    const lowest = ls.slice().sort((a, b) => a.price - b.price)[0];
+    featured.push({
       id: productId,
-      title: prod?.title ?? `Ürün #${productId}`,
-      brand: prod?.brand ?? null,
-      image_url: img,
+      title: prod.title,
+      brand: prod.brand ?? null,
+      image_url: ls.find((l) => l.image_url)?.image_url ?? null,
       lowestPrice: lowest.price,
       storeName: lowest.store_name,
       listingCount: ls.length
-    };
-  });
+    });
+  }
 
-  return {
-    featured,
-    stats: {
-      productCount: products.length,
-      storeCount: storeNames.size,
-      listingCount: listings.length
-    }
-  };
+  return { featured, stats };
 }
 
 export default async function HomePage() {

@@ -48,24 +48,35 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
   const fallback = { featured: [], stats: { productCount: 0, storeCount: 0, listingCount: 0 } };
   if (!supabase) return fallback;
 
-  // Fetch all listings first — no limit, so we get the full picture
-  const listingsRes = await supabase
-    .from("store_listings")
-    .select("id, product_id, store_name, price, image_url, updated_at");
+  const [productCountRes, listingCountRes, listingsRes] = await Promise.all([
+    supabase.from("products").select("id", { count: "exact", head: true }),
+    supabase.from("store_listings").select("id", { count: "exact", head: true }),
+    supabase
+      .from("store_listings")
+      .select("id, product_id, store_name, price, image_url")
+      .order("updated_at", { ascending: false })
+      .limit(1000)
+  ]);
 
   const listings = listingsRes.data ?? [];
-  if (listings.length === 0) return fallback;
+  const productCount = productCountRes.count ?? 0;
+  const listingCount = listingCountRes.count ?? listings.length;
+
+  if (listings.length === 0) {
+    return {
+      featured: [],
+      stats: { productCount, storeCount: 0, listingCount }
+    };
+  }
 
   const storeNames = new Set(listings.map((l) => l.store_name));
 
-  // Group listings by product_id
   const listingsByProduct = new Map<number, typeof listings>();
   for (const l of listings) {
     if (!listingsByProduct.has(l.product_id)) listingsByProduct.set(l.product_id, []);
     listingsByProduct.get(l.product_id)!.push(l);
   }
 
-  // Top 12 product IDs sorted by how many stores carry them
   const topProductIds = Array.from(listingsByProduct.entries())
     .filter(([, ls]) => ls.length >= 2)
     .sort((a, b) => b[1].length - a[1].length)
@@ -73,9 +84,9 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
     .map(([id]) => id);
 
   const stats: SiteStats = {
-    productCount: listingsByProduct.size,
+    productCount: productCount || listingsByProduct.size,
     storeCount: storeNames.size,
-    listingCount: listings.length
+    listingCount
   };
 
   if (topProductIds.length === 0) return { featured: [], stats };
@@ -92,7 +103,7 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
     const prod = productMap.get(productId);
     if (!prod) return []; // skip if product not found
     const ls = listingsByProduct.get(productId)!;
-    const lowest = [...ls].sort((a, b) => a.price - b.price)[0];
+    const lowest = ls.slice().sort((a, b) => a.price - b.price)[0];
     const img = ls.find((l) => l.image_url)?.image_url ?? null;
     return [{
       id: productId,
