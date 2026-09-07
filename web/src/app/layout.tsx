@@ -91,6 +91,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               ))}
             </nav>
           </div>
+          <nav className="container-shell flex gap-1 overflow-x-auto pb-2 lg:hidden" aria-label="Hızlı aramalar">
+            {navLinks.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="shrink-0 rounded-md border border-[#30363d] px-3 py-1 text-xs font-medium text-[#8b949e] hover:border-[#58a6ff] hover:text-white"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
         </header>
 
         {/* ── MAIN ── */}

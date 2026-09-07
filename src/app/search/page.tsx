@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient, type ProductRow, type StoreListingRow } from "@/lib/supabase";
+import { sanitizeSearchTokens, toFtsQuery, toOrFilter } from "@/lib/search";
 
 export const revalidate = 3600;
 
@@ -35,30 +36,29 @@ async function searchProducts(query: string, sortBy?: string): Promise<SearchRes
   if (!supabase) return [];
 
   const clean = query.replace(/[%_]/g, "");
-  const words = clean.split(/\s+/).filter((w) => w.length > 0);
+  const words = sanitizeSearchTokens(clean);
   if (!words.length) return [];
 
   let productsRes;
   if (words.length > 1) {
-    const fts = words.map((w) => `'${w}'`).join(" & ");
+    const fts = toFtsQuery(words);
     productsRes = await supabase
       .from("products")
       .select("id, title, brand, category_id, slug, created_at")
       .textSearch("title", fts, { config: "simple" })
       .limit(200);
     if (!productsRes.data || productsRes.data.length < 5) {
-      const or = words.map((w) => `title.ilike.%${w}%,brand.ilike.%${w}%`).join(",");
       productsRes = await supabase
         .from("products")
         .select("id, title, brand, category_id, slug, created_at")
-        .or(or)
+        .or(toOrFilter(words))
         .limit(200);
     }
   } else {
     productsRes = await supabase
       .from("products")
       .select("id, title, brand, category_id, slug, created_at")
-      .or(`title.ilike.%${clean}%,brand.ilike.%${clean}%`)
+      .or(toOrFilter(words))
       .limit(200);
   }
 
@@ -255,6 +255,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             <strong className="text-[#0969da]">Savage Gear Silikon</strong>,{" "}
             <strong className="text-[#0969da]">Okuma Surf</strong>
           </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            {["lrf", "spin", "surf", "rapala", "jighead"].map((term) => (
+              <Link key={term} href={`/search?q=${term}`} className="btn text-xs">
+                {term}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 
