@@ -172,7 +172,7 @@ export default async function HomePage() {
         <div className="section-header">
           <h2 className="text-lg font-bold text-[#1c2128]">Kategoriler</h2>
           <Link href="/categories" className="text-sm font-semibold text-[#0969da] hover:underline">
-            Tümünü gör →
+            Tümünü gör
           </Link>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
@@ -194,7 +194,7 @@ export default async function HomePage() {
           <div className="section-header">
             <h2 className="text-lg font-bold text-[#1c2128]">En Çok Karşılaştırılan Ürünler</h2>
             <Link href="/search?q=makine" className="text-sm font-semibold text-[#0969da] hover:underline">
-              Tüm ürünleri ara →
+              Tüm ürünleri ara
             </Link>
           </div>
 
@@ -245,7 +245,7 @@ export default async function HomePage() {
                         {product.storeName}
                       </p>
                     </div>
-                    <span className="text-xs font-semibold text-[#0969da]">İncele →</span>
+                    <span className="text-xs font-semibold text-[#0969da]">İncele</span>
                   </div>
                 </div>
               </Link>

@@ -63,7 +63,7 @@ export default function CategoriesPage() {
                   href={`/categories/${main.slug}`}
                   className="btn btn-primary w-full justify-center"
                 >
-                  Tüm {main.name} Ürünleri →
+                  Tüm {main.name} Ürünleri
                 </Link>
               </div>
             </div>
