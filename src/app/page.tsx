@@ -3,7 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient } from "@/lib/supabase";
-import { mainCategories, categoryIconMap } from "@/lib/categories";
+import { mainCategories } from "@/lib/categories";
 
 export const revalidate = 3600;
 
@@ -48,60 +48,64 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
   const fallback = { featured: [], stats: { productCount: 0, storeCount: 0, listingCount: 0 } };
   if (!supabase) return fallback;
 
-  const [listingsRes, productsRes] = await Promise.all([
-    supabase
-      .from("store_listings")
-      .select("id, product_id, store_name, price, image_url, updated_at"),
-    supabase
-      .from("products")
-      .select("id, title, brand")
-      .order("created_at", { ascending: false })
-      .limit(200)
-  ]);
+  // Fetch all listings first — no limit, so we get the full picture
+  const listingsRes = await supabase
+    .from("store_listings")
+    .select("id, product_id, store_name, price, image_url, updated_at");
 
   const listings = listingsRes.data ?? [];
-  const products = productsRes.data ?? [];
-
-  if (listings.length === 0 || products.length === 0) return fallback;
+  if (listings.length === 0) return fallback;
 
   const storeNames = new Set(listings.map((l) => l.store_name));
 
-  const productMap = new Map(products.map((p) => [p.id, p]));
+  // Group listings by product_id
   const listingsByProduct = new Map<number, typeof listings>();
   for (const l of listings) {
     if (!listingsByProduct.has(l.product_id)) listingsByProduct.set(l.product_id, []);
     listingsByProduct.get(l.product_id)!.push(l);
   }
 
-  const ranked = [...listingsByProduct.entries()]
+  // Top 12 product IDs sorted by how many stores carry them
+  const topProductIds = Array.from(listingsByProduct.entries())
     .filter(([, ls]) => ls.length >= 2)
     .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 6);
+    .slice(0, 12)
+    .map(([id]) => id);
 
-  const featured: FeaturedProduct[] = ranked.map(([productId, ls]) => {
-    const sorted = [...ls].sort((a, b) => a.price - b.price);
-    const lowest = sorted[0];
+  const stats: SiteStats = {
+    productCount: listingsByProduct.size,
+    storeCount: storeNames.size,
+    listingCount: listings.length
+  };
+
+  if (topProductIds.length === 0) return { featured: [], stats };
+
+  // Fetch ONLY the products we need by their exact IDs — no limit, no offset ordering issues
+  const productsRes = await supabase
+    .from("products")
+    .select("id, title, brand")
+    .in("id", topProductIds);
+
+  const productMap = new Map((productsRes.data ?? []).map((p) => [p.id, p]));
+
+  const featured: FeaturedProduct[] = topProductIds.slice(0, 6).flatMap((productId) => {
     const prod = productMap.get(productId);
+    if (!prod) return []; // skip if product not found
+    const ls = listingsByProduct.get(productId)!;
+    const lowest = [...ls].sort((a, b) => a.price - b.price)[0];
     const img = ls.find((l) => l.image_url)?.image_url ?? null;
-    return {
+    return [{
       id: productId,
-      title: prod?.title ?? `Ürün #${productId}`,
-      brand: prod?.brand ?? null,
+      title: prod.title,
+      brand: prod.brand ?? null,
       image_url: img,
       lowestPrice: lowest.price,
       storeName: lowest.store_name,
       listingCount: ls.length
-    };
+    }];
   });
 
-  return {
-    featured,
-    stats: {
-      productCount: products.length,
-      storeCount: storeNames.size,
-      listingCount: listings.length
-    }
-  };
+  return { featured, stats };
 }
 
 export default async function HomePage() {
@@ -168,25 +172,19 @@ export default async function HomePage() {
         <div className="section-header">
           <h2 className="text-lg font-bold text-[#1c2128]">Kategoriler</h2>
           <Link href="/categories" className="text-sm font-semibold text-[#0969da] hover:underline">
-            Tümünü gör →
+            Tümünü gör
           </Link>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-          {quickCategories.map((cat) => {
-            const Icon = categoryIconMap[cat.iconName as keyof typeof categoryIconMap];
-            return (
-              <Link
-                key={cat.slug}
-                href={`/categories/${cat.slug}`}
-                className="group panel-flat flex flex-col items-center gap-2 p-3 text-center hover:border-[#0969da] hover:shadow-md transition-all"
-              >
-                <div className="rounded-lg bg-[#f6f8fa] p-2.5 group-hover:bg-[#ddf4ff] transition-colors">
-                  <Icon size={20} className="text-[#57606a] group-hover:text-[#0969da]" />
-                </div>
-                <span className="text-xs font-semibold text-[#1c2128] leading-tight">{cat.name}</span>
-              </Link>
-            );
-          })}
+          {quickCategories.map((cat) => (
+            <Link
+              key={cat.slug}
+              href={`/categories/${cat.slug}`}
+              className="panel-flat flex items-center justify-center p-3 text-center hover:border-[#0969da] hover:shadow-md transition-all min-h-[52px]"
+            >
+              <span className="text-xs font-semibold text-[#1c2128] leading-tight">{cat.name}</span>
+            </Link>
+          ))}
         </div>
       </section>
 
@@ -196,7 +194,7 @@ export default async function HomePage() {
           <div className="section-header">
             <h2 className="text-lg font-bold text-[#1c2128]">En Çok Karşılaştırılan Ürünler</h2>
             <Link href="/search?q=makine" className="text-sm font-semibold text-[#0969da] hover:underline">
-              Tüm ürünleri ara →
+              Tüm ürünleri ara
             </Link>
           </div>
 
@@ -216,6 +214,7 @@ export default async function HomePage() {
                       fill
                       sizes="(max-width: 640px) 100vw, 33vw"
                       className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
+                      unoptimized={product.image_url.startsWith("http://")}
                     />
                   ) : (
                     <div className="text-3xl opacity-20">🎣</div>
@@ -246,7 +245,7 @@ export default async function HomePage() {
                         {product.storeName}
                       </p>
                     </div>
-                    <span className="text-xs font-semibold text-[#0969da]">İncele →</span>
+                    <span className="text-xs font-semibold text-[#0969da]">İncele</span>
                   </div>
                 </div>
               </Link>

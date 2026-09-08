@@ -1,0 +1,21 @@
+name: Frontend sync check
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "web/src/**"
+  pull_request:
+    paths:
+      - "src/**"
+      - "web/src/**"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify src/ and web/src/ are identical
+        run: ./scripts/check-frontend-sync.sh
