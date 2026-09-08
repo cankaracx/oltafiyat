@@ -30,6 +30,7 @@ export const metadata: Metadata = {
 
 const navLinks = [
   { href: "/categories", label: "Kategoriler" },
+  { href: "/magazalar", label: "Mağazalar" },
   { href: "/search?q=lrf", label: "LRF" },
   { href: "/search?q=spin", label: "Spin" },
   { href: "/search?q=surf", label: "Surf" }
@@ -109,6 +110,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 Türkiye balık avı mağazalarının fiyatlarını takip eden bağımsız karşılaştırma platformu.
                 En düşük fiyatı bul, mağazaya git, doğrudan satın al.
               </p>
+              <Link href="/magazalar" className="mt-3 inline-block text-sm font-semibold text-[#0969da] hover:underline">
+                Takip ettiğimiz tüm mağazaları gör
+              </Link>
             </div>
 
             <div>

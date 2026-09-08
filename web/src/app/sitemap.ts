@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getSupabaseClient } from "@/lib/supabase";
 import { mainCategories } from "@/lib/categories";
+import { slugify } from "@/lib/slug";
 
 const BASE_URL = "https://oltafiyat.com";
 
@@ -10,7 +11,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: BASE_URL, lastModified: now, changeFrequency: "daily", priority: 1.0 },
     { url: `${BASE_URL}/categories`, lastModified: now, changeFrequency: "weekly", priority: 0.8 },
-    { url: `${BASE_URL}/search`, lastModified: now, changeFrequency: "weekly", priority: 0.6 }
+    { url: `${BASE_URL}/search`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
+    { url: `${BASE_URL}/magazalar`, lastModified: now, changeFrequency: "weekly", priority: 0.6 }
   ];
 
   const categoryRoutes: MetadataRoute.Sitemap = mainCategories.map((c) => ({
@@ -38,5 +40,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6
   }));
 
-  return [...staticRoutes, ...categoryRoutes, ...productRoutes];
+  const { data: storeRows } = await supabase.from("store_listings").select("store_name");
+  const storeNames = new Set((storeRows ?? []).map((r) => r.store_name));
+  const storeRoutes: MetadataRoute.Sitemap = Array.from(storeNames).map((name) => ({
+    url: `${BASE_URL}/magazalar/${slugify(name)}`,
+    lastModified: now,
+    changeFrequency: "daily" as const,
+    priority: 0.5
+  }));
+
+  return [...staticRoutes, ...categoryRoutes, ...productRoutes, ...storeRoutes];
 }
