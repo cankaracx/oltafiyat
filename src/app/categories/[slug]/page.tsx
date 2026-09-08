@@ -6,14 +6,18 @@ import { ChevronLeft } from "lucide-react";
 import { mainCategories, categories } from "@/lib/categories";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient, type ProductRow, type StoreListingRow } from "@/lib/supabase";
+import { buildHref, parseNumberParam } from "@/lib/query";
+import { FilterBar } from "@/components/FilterBar";
+import { Pagination } from "@/components/Pagination";
 
 export const revalidate = 43200;
 
 const PAGE_SIZE = 24;
+const MAX_CATEGORY_PRODUCTS = 2000;
 
 type CategoryPageProps = {
   params: { slug: string };
-  searchParams: { sub?: string; sort?: string; page?: string };
+  searchParams: { sub?: string; sort?: string; page?: string; brand?: string; min?: string; max?: string };
 };
 
 type ProductWithLowest = ProductRow & {
@@ -30,11 +34,21 @@ export function generateMetadata({ params }: CategoryPageProps): Metadata {
   return { title: cat.name, description: cat.description };
 }
 
+type CategoryFilters = { sort: string; brand?: string; min?: number; max?: number };
+
 async function getCategoryProducts(
-  slug: string, subSlug?: string, sort = "newest", page = 1
-): Promise<{ products: ProductWithLowest[]; catName: string; catDesc: string; mainCat: typeof mainCategories[0] | undefined; activeSubSlug: string | null; totalCount: number }> {
+  slug: string, subSlug: string | undefined, filters: CategoryFilters
+): Promise<{
+  products: ProductWithLowest[];
+  brands: string[];
+  catName: string;
+  catDesc: string;
+  mainCat: typeof mainCategories[0] | undefined;
+  activeSubSlug: string | null;
+  totalCount: number;
+}> {
   const supabase = getSupabaseClient();
-  const empty = { products: [], catName: "", catDesc: "", mainCat: undefined, activeSubSlug: null, totalCount: 0 };
+  const empty = { products: [], brands: [], catName: "", catDesc: "", mainCat: undefined, activeSubSlug: null, totalCount: 0 };
   if (!supabase) return empty;
 
   let mainCat = mainCategories.find((c) => c.slug === slug);
@@ -64,17 +78,15 @@ async function getCategoryProducts(
   const catIds = cats?.map((c) => c.id) ?? [];
   if (!catIds.length) return { ...empty, catName, catDesc, mainCat, activeSubSlug };
 
-  const from = (page - 1) * PAGE_SIZE;
-  const { data: prods, count } = await supabase
+  const { data: prods } = await supabase
     .from("products")
-    .select("id, title, brand, category_id, slug, created_at", { count: "exact" })
+    .select("id, title, brand, category_id, slug, created_at")
     .in("category_id", catIds)
     .order("created_at", { ascending: false })
-    .range(from, from + PAGE_SIZE - 1);
+    .limit(MAX_CATEGORY_PRODUCTS);
 
   const products = prods ?? [];
-  const totalCount = count ?? 0;
-  if (!products.length) return { products: [], catName, catDesc, mainCat, activeSubSlug, totalCount };
+  if (!products.length) return { products: [], brands: [], catName, catDesc, mainCat, activeSubSlug, totalCount: 0 };
 
   const { data: listData } = await supabase
     .from("store_listings")
@@ -94,10 +106,18 @@ async function getCategoryProducts(
     };
   });
 
-  if (sort === "price_asc") merged.sort((a, b) => (a.lowestPrice ?? Infinity) - (b.lowestPrice ?? Infinity));
-  else if (sort === "price_desc") merged.sort((a, b) => (b.lowestPrice ?? -Infinity) - (a.lowestPrice ?? -Infinity));
+  const brands = Array.from(
+    new Set(merged.map((p) => p.brand).filter((b): b is string => Boolean(b)))
+  ).sort((a, b) => a.localeCompare(b, "tr"));
 
-  return { products: merged, catName, catDesc, mainCat, activeSubSlug, totalCount };
+  if (filters.brand) merged = merged.filter((p) => p.brand === filters.brand);
+  if (filters.min !== undefined) merged = merged.filter((p) => p.lowestPrice !== null && p.lowestPrice >= filters.min!);
+  if (filters.max !== undefined) merged = merged.filter((p) => p.lowestPrice !== null && p.lowestPrice <= filters.max!);
+
+  if (filters.sort === "price_asc") merged.sort((a, b) => (a.lowestPrice ?? Infinity) - (b.lowestPrice ?? Infinity));
+  else if (filters.sort === "price_desc") merged.sort((a, b) => (b.lowestPrice ?? -Infinity) - (a.lowestPrice ?? -Infinity));
+
+  return { products: merged, brands, catName, catDesc, mainCat, activeSubSlug, totalCount: merged.length };
 }
 
 const SORT_OPTIONS = [
@@ -111,17 +131,20 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
   const sub  = searchParams.sub;
   const sort = searchParams.sort || "newest";
   const page = Math.max(1, Number(searchParams.page) || 1);
+  const brand = searchParams.brand || undefined;
+  const min = parseNumberParam(searchParams.min);
+  const max = parseNumberParam(searchParams.max);
 
-  const { products, catName, catDesc, mainCat, activeSubSlug, totalCount } =
-    await getCategoryProducts(slug, sub, sort, page);
+  const { products: allProducts, brands, catName, catDesc, mainCat, activeSubSlug, totalCount } =
+    await getCategoryProducts(slug, sub, { sort, brand, min, max });
 
   if (!mainCat) notFound();
 
   const subCats   = categories.filter((c) => c.parentSlug === mainCat.slug);
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const products = allProducts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const pageQ = (extra = "") =>
-    `/categories/${slug}?${sub ? `sub=${sub}&` : ""}sort=${sort}${extra}`;
+  const baseParams = { sub, sort, brand, min, max };
 
   return (
     <section className="container-shell py-8">
@@ -142,7 +165,7 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
       {subCats.length > 0 && (
         <div className="mb-5 flex flex-wrap gap-2">
           <Link
-            href={`/categories/${mainCat.slug}?sort=${sort}`}
+            href={buildHref(`/categories/${mainCat.slug}`, { sort })}
             className={`btn btn-sm ${!activeSubSlug ? "btn-blue" : ""}`}
           >
             Tümü
@@ -150,13 +173,25 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
           {subCats.map((s) => (
             <Link
               key={s.slug}
-              href={`/categories/${mainCat.slug}?sub=${s.slug}&sort=${sort}`}
+              href={buildHref(`/categories/${mainCat.slug}`, { sub: s.slug, sort })}
               className={`btn btn-sm ${activeSubSlug === s.slug ? "btn-blue" : ""}`}
             >
               {s.name}
             </Link>
           ))}
         </div>
+      )}
+
+      {totalCount > 0 && (
+        <FilterBar
+          action={`/categories/${slug}`}
+          hidden={{ sub, sort }}
+          brands={brands}
+          selectedBrand={brand}
+          minPrice={min?.toString()}
+          maxPrice={max?.toString()}
+          clearHref={buildHref(`/categories/${slug}`, { sub, sort })}
+        />
       )}
 
       {/* Sort + count bar */}
@@ -171,7 +206,7 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
             {SORT_OPTIONS.map((opt) => (
               <Link
                 key={opt.value}
-                href={`/categories/${slug}?${sub ? `sub=${sub}&` : ""}sort=${opt.value}`}
+                href={buildHref(`/categories/${slug}`, { ...baseParams, sort: opt.value })}
                 className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${
                   sort === opt.value
                     ? "bg-white text-[#1c2128] shadow-sm border border-[#d0d7de]"
@@ -229,7 +264,7 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
                       {product.lowestPrice !== null ? formatTRY(product.lowestPrice) : "—"}
                     </p>
                   </div>
-                  <span className="text-xs font-semibold text-[#0969da]">İncele →</span>
+                  <span className="text-xs font-semibold text-[#0969da]">İncele</span>
                 </div>
               </div>
             </Link>
@@ -238,25 +273,20 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
       ) : (
         <div className="panel border-dashed p-12 text-center">
           <p className="text-4xl mb-4 opacity-30">📦</p>
-          <h2 className="text-lg font-bold text-[#1c2128]">Bu kategoride henüz ürün yok</h2>
-          <p className="mt-2 text-sm text-[#57606a]">Scraper yeni veriler topladığında otomatik görünecektir.</p>
+          <h2 className="text-lg font-bold text-[#1c2128]">
+            {totalCount === 0 && !brand && min === undefined && max === undefined
+              ? "Bu kategoride henüz ürün yok"
+              : "Filtrelere uyan ürün bulunamadı"}
+          </h2>
+          <p className="mt-2 text-sm text-[#57606a]">
+            {totalCount === 0 && !brand && min === undefined && max === undefined
+              ? "Scraper yeni veriler topladığında otomatik görünecektir."
+              : "Fiyat aralığını genişlet veya farklı bir marka seç."}
+          </p>
         </div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <nav aria-label="Sayfalama" className="mt-8 flex items-center justify-center gap-2">
-          {page > 1 && (
-            <Link href={pageQ(`&page=${page - 1}`)} className="btn">← Önceki</Link>
-          )}
-          <span className="px-4 py-2 text-sm text-[#57606a]">
-            Sayfa {page} / {totalPages}
-          </span>
-          {page < totalPages && (
-            <Link href={pageQ(`&page=${page + 1}`)} className="btn">Sonraki →</Link>
-          )}
-        </nav>
-      )}
+      <Pagination page={page} totalPages={totalPages} buildHref={(p) => buildHref(`/categories/${slug}`, { ...baseParams, page: p })} />
     </section>
   );
 }

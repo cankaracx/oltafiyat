@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { mainCategories, categories, categoryIconMap } from "@/lib/categories";
+import { mainCategories, categories } from "@/lib/categories";
 
 export const metadata: Metadata = {
   title: "Balıkçılık Kategorileri",
@@ -22,7 +22,6 @@ export default function CategoriesPage() {
       <div className="grid gap-5 md:grid-cols-2">
         {mainCategories.map((main) => {
           const subs = categories.filter((c) => c.parentSlug === main.slug);
-          const Icon = categoryIconMap[main.iconName as keyof typeof categoryIconMap];
 
           return (
             <div
@@ -30,19 +29,14 @@ export default function CategoriesPage() {
               className="panel flex flex-col justify-between hover:shadow-md hover:border-[#0969da]/40 transition-all"
             >
               {/* Header */}
-              <div className="flex items-start gap-4 p-5 border-b border-[#e8ecf0]">
-                <div className="shrink-0 rounded-xl bg-[#f6f8fa] border border-[#e8ecf0] p-3">
-                  <Icon size={22} className="text-[#57606a]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <Link
-                    href={`/categories/${main.slug}`}
-                    className="text-lg font-bold text-[#0969da] hover:underline"
-                  >
-                    {main.name}
-                  </Link>
-                  <p className="mt-0.5 text-xs text-[#57606a] leading-relaxed">{main.description}</p>
-                </div>
+              <div className="p-5 border-b border-[#e8ecf0]">
+                <Link
+                  href={`/categories/${main.slug}`}
+                  className="text-lg font-bold text-[#0969da] hover:underline"
+                >
+                  {main.name}
+                </Link>
+                <p className="mt-0.5 text-xs text-[#57606a] leading-relaxed">{main.description}</p>
               </div>
 
               {/* Sub-categories */}
@@ -69,7 +63,7 @@ export default function CategoriesPage() {
                   href={`/categories/${main.slug}`}
                   className="btn btn-primary w-full justify-center"
                 >
-                  Tüm {main.name} Ürünleri →
+                  Tüm {main.name} Ürünleri
                 </Link>
               </div>
             </div>

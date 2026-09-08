@@ -4,6 +4,9 @@ import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient, type ProductRow, type StoreListingRow } from "@/lib/supabase";
+import { buildHref, parseNumberParam } from "@/lib/query";
+import { FilterBar } from "@/components/FilterBar";
+import { Pagination } from "@/components/Pagination";
 
 export const revalidate = 3600;
 
@@ -15,7 +18,7 @@ export const metadata: Metadata = {
 const PAGE_SIZE = 24;
 
 type SearchPageProps = {
-  searchParams: { q?: string; sort?: string; page?: string };
+  searchParams: { q?: string; sort?: string; page?: string; brand?: string; min?: string; max?: string };
 };
 
 type SearchResult = ProductRow & {
@@ -25,18 +28,23 @@ type SearchResult = ProductRow & {
   image_url: string | null;
 };
 
+type SearchFilters = { sort?: string; brand?: string; min?: number; max?: number };
+
 function normalizeQuery(v: string | undefined) {
   return (v ?? "").trim().replace(/\s+/g, " ");
 }
 
-async function searchProducts(query: string, sortBy?: string): Promise<SearchResult[]> {
-  if (!query) return [];
+async function searchProducts(
+  query: string,
+  filters: SearchFilters
+): Promise<{ results: SearchResult[]; brands: string[] }> {
+  if (!query) return { results: [], brands: [] };
   const supabase = getSupabaseClient();
-  if (!supabase) return [];
+  if (!supabase) return { results: [], brands: [] };
 
   const clean = query.replace(/[%_]/g, "");
   const words = clean.split(/\s+/).filter((w) => w.length > 0);
-  if (!words.length) return [];
+  if (!words.length) return { results: [], brands: [] };
 
   let productsRes;
   if (words.length > 1) {
@@ -64,7 +72,7 @@ async function searchProducts(query: string, sortBy?: string): Promise<SearchRes
 
   const products = productsRes.data ?? [];
   const ids = products.map((p) => p.id);
-  if (!ids.length) return [];
+  if (!ids.length) return { results: [], brands: [] };
 
   const { data: listingsData } = await supabase
     .from("store_listings")
@@ -76,7 +84,7 @@ async function searchProducts(query: string, sortBy?: string): Promise<SearchRes
 
   const scored = products.map((product) => {
     const tl = `${product.brand ?? ""} ${product.title}`.toLowerCase();
-    let score = words.reduce((acc, w) => {
+    const score = words.reduce((acc, w) => {
       const wl = w.toLowerCase();
       return acc + (tl.includes(wl) ? 10 : 0) + (tl.startsWith(wl) ? 5 : 0);
     }, 0);
@@ -89,17 +97,31 @@ async function searchProducts(query: string, sortBy?: string): Promise<SearchRes
         lowestStore: pl[0]?.store_name ?? null,
         listingCount: pl.length,
         image_url: img
-      },
+      } as SearchResult,
       score
     };
   });
 
-  if (sortBy === "price_asc") scored.sort((a, b) => (a.product.lowestPrice ?? Infinity) - (b.product.lowestPrice ?? Infinity));
-  else if (sortBy === "price_desc") scored.sort((a, b) => (b.product.lowestPrice ?? -Infinity) - (a.product.lowestPrice ?? -Infinity));
-  else if (sortBy === "newest") scored.sort((a, b) => new Date(b.product.created_at).getTime() - new Date(a.product.created_at).getTime());
-  else scored.sort((a, b) => b.score - a.score);
+  const brands = Array.from(
+    new Set(scored.map((s) => s.product.brand).filter((b): b is string => Boolean(b)))
+  ).sort((a, b) => a.localeCompare(b, "tr"));
 
-  return scored.map((s) => s.product);
+  let filtered = scored;
+  if (filters.brand) filtered = filtered.filter((s) => s.product.brand === filters.brand);
+  if (filters.min !== undefined) {
+    filtered = filtered.filter((s) => s.product.lowestPrice !== null && s.product.lowestPrice >= filters.min!);
+  }
+  if (filters.max !== undefined) {
+    filtered = filtered.filter((s) => s.product.lowestPrice !== null && s.product.lowestPrice <= filters.max!);
+  }
+
+  const sortBy = filters.sort;
+  if (sortBy === "price_asc") filtered.sort((a, b) => (a.product.lowestPrice ?? Infinity) - (b.product.lowestPrice ?? Infinity));
+  else if (sortBy === "price_desc") filtered.sort((a, b) => (b.product.lowestPrice ?? -Infinity) - (a.product.lowestPrice ?? -Infinity));
+  else if (sortBy === "newest") filtered.sort((a, b) => new Date(b.product.created_at).getTime() - new Date(a.product.created_at).getTime());
+  else filtered.sort((a, b) => b.score - a.score);
+
+  return { results: filtered.map((s) => s.product), brands };
 }
 
 const SORT_OPTIONS = [
@@ -113,12 +135,17 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const query = normalizeQuery(searchParams.q);
   const sort = searchParams.sort || "relevance";
   const page = Math.max(1, Number(searchParams.page) || 1);
+  const brand = searchParams.brand || undefined;
+  const min = parseNumberParam(searchParams.min);
+  const max = parseNumberParam(searchParams.max);
 
-  const all = await searchProducts(query, sort);
+  const { results: all, brands } = await searchProducts(query, { sort, brand, min, max });
   const total = all.length;
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const results = all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const supabaseReady = Boolean(getSupabaseClient());
+
+  const baseParams = { q: query, sort, brand, min, max };
 
   return (
     <section className="container-shell py-8">
@@ -147,6 +174,18 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
       )}
 
+      {query && total > 0 && (
+        <FilterBar
+          action="/search"
+          hidden={{ q: query, sort }}
+          brands={brands}
+          selectedBrand={brand}
+          minPrice={min?.toString()}
+          maxPrice={max?.toString()}
+          clearHref={buildHref("/search", { q: query, sort })}
+        />
+      )}
+
       {/* Results header */}
       {query && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
@@ -164,7 +203,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 {SORT_OPTIONS.map((opt) => (
                   <Link
                     key={opt.value}
-                    href={`/search?q=${encodeURIComponent(query)}&sort=${opt.value}`}
+                    href={buildHref("/search", { ...baseParams, sort: opt.value })}
                     className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${
                       sort === opt.value
                         ? "bg-white text-[#1c2128] shadow-sm border border-[#d0d7de]"
@@ -225,7 +264,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                       {product.lowestStore ?? "—"}
                     </p>
                   </div>
-                  <span className="text-xs font-semibold text-[#0969da]">İncele →</span>
+                  <span className="text-xs font-semibold text-[#0969da]">İncele</span>
                 </div>
               </div>
             </Link>
@@ -258,22 +297,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <nav aria-label="Sayfalama" className="mt-8 flex items-center justify-center gap-2">
-          {page > 1 && (
-            <Link href={`/search?q=${encodeURIComponent(query)}&sort=${sort}&page=${page - 1}`} className="btn">
-              ← Önceki
-            </Link>
-          )}
-          <span className="px-4 py-2 text-sm text-[#57606a]">Sayfa {page} / {totalPages}</span>
-          {page < totalPages && (
-            <Link href={`/search?q=${encodeURIComponent(query)}&sort=${sort}&page=${page + 1}`} className="btn">
-              Sonraki →
-            </Link>
-          )}
-        </nav>
-      )}
+      <Pagination page={page} totalPages={totalPages} buildHref={(p) => buildHref("/search", { ...baseParams, page: p })} />
     </section>
   );
 }
