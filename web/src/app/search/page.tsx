@@ -46,6 +46,9 @@ async function searchProducts(query: string, sortBy?: string): Promise<SearchRes
       .select("id, title, brand, category_id, slug, created_at")
       .textSearch("title", fts, { config: "simple" })
       .limit(200);
+    if (productsRes.error) {
+      console.error("[searchProducts] full-text search failed:", productsRes.error);
+    }
     if (!productsRes.data || productsRes.data.length < 5) {
       const or = words.map((w) => `title.ilike.%${w}%,brand.ilike.%${w}%`).join(",");
       productsRes = await supabase
@@ -62,15 +65,24 @@ async function searchProducts(query: string, sortBy?: string): Promise<SearchRes
       .limit(200);
   }
 
+  if (productsRes.error) {
+    console.error("[searchProducts] products query failed:", productsRes.error);
+    return [];
+  }
+
   const products = productsRes.data ?? [];
   const ids = products.map((p) => p.id);
   if (!ids.length) return [];
 
-  const { data: listingsData } = await supabase
+  const { data: listingsData, error: listingsError } = await supabase
     .from("store_listings")
     .select("id, product_id, store_name, raw_title, price, product_url, image_url, updated_at")
     .in("product_id", ids)
     .order("price", { ascending: true });
+
+  if (listingsError) {
+    console.error("[searchProducts] store_listings query failed:", listingsError);
+  }
 
   const listings = (listingsData ?? []) as StoreListingRow[];
 

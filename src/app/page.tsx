@@ -59,6 +59,13 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
       .limit(200)
   ]);
 
+  if (listingsRes.error) {
+    console.error("[getHomepageData] store_listings query failed:", listingsRes.error);
+  }
+  if (productsRes.error) {
+    console.error("[getHomepageData] products query failed:", productsRes.error);
+  }
+
   const listings = listingsRes.data ?? [];
   const products = productsRes.data ?? [];
 

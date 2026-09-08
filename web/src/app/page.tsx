@@ -53,6 +53,11 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
     .from("store_listings")
     .select("id, product_id, store_name, price, image_url, updated_at");
 
+  if (listingsRes.error) {
+    console.error("[getHomepageData] store_listings query failed:", listingsRes.error);
+    return fallback;
+  }
+
   const listings = listingsRes.data ?? [];
   if (listings.length === 0) return fallback;
 
@@ -85,6 +90,10 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
     .from("products")
     .select("id, title, brand")
     .in("id", topProductIds);
+
+  if (productsRes.error) {
+    console.error("[getHomepageData] products query failed:", productsRes.error);
+  }
 
   const productMap = new Map((productsRes.data ?? []).map((p) => [p.id, p]));
 
