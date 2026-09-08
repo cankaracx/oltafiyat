@@ -80,7 +80,7 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
     listingsByProduct.get(l.product_id)!.push(l);
   }
 
-  const ranked = [...listingsByProduct.entries()]
+  const ranked = Array.from(listingsByProduct.entries())
     .filter(([, ls]) => ls.length >= 2)
     .sort((a, b) => b[1].length - a[1].length)
     .slice(0, 6);
