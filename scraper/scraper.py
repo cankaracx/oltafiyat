@@ -527,8 +527,31 @@ def extract_variant_tokens(title: str) -> frozenset[str]:
 
 def require_supabase() -> Client:
     if not SUPABASE_URL or not SUPABASE_KEY:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_KEY environment variables are required.")
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+        raise RuntimeError(
+            "SUPABASE_URL and SUPABASE_KEY environment variables are required. "
+            "Set the SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY secrets in the "
+            "GitHub repository (Settings > Secrets and variables > Actions)."
+        )
+
+    parsed = urlparse(SUPABASE_URL)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise RuntimeError(
+            f"SUPABASE_URL is not a valid URL: {SUPABASE_URL!r}. Expected something like "
+            "'https://<project-ref>.supabase.co'. Check the SUPABASE_URL secret value in "
+            "the GitHub repository (Settings > Secrets and variables > Actions)."
+        )
+
+    client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    try:
+        client.table("categories").select("id").limit(1).execute()
+    except Exception as exc:
+        raise RuntimeError(
+            f"Could not reach Supabase at {SUPABASE_URL!r}: {exc}. This usually means the "
+            "SUPABASE_URL secret is stale or wrong, or SUPABASE_SERVICE_ROLE_KEY doesn't "
+            "match that project. Check Settings > Secrets and variables > Actions in the "
+            "GitHub repository."
+        ) from exc
+    return client
 
 
 def normalize_text(value: str) -> str:
