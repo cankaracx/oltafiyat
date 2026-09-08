@@ -59,6 +59,13 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
       .limit(200)
   ]);
 
+  if (listingsRes.error) {
+    console.error("[getHomepageData] store_listings query failed:", listingsRes.error);
+  }
+  if (productsRes.error) {
+    console.error("[getHomepageData] products query failed:", productsRes.error);
+  }
+
   const listings = listingsRes.data ?? [];
   const products = productsRes.data ?? [];
 
@@ -73,7 +80,7 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
     listingsByProduct.get(l.product_id)!.push(l);
   }
 
-  const ranked = [...listingsByProduct.entries()]
+  const ranked = Array.from(listingsByProduct.entries())
     .filter(([, ls]) => ls.length >= 2)
     .sort((a, b) => b[1].length - a[1].length)
     .slice(0, 6);

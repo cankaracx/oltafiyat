@@ -33,9 +33,7 @@ export function generateMetadata({ params }: CategoryPageProps): Metadata {
 async function getCategoryProducts(
   slug: string, subSlug?: string, sort = "newest", page = 1
 ): Promise<{ products: ProductWithLowest[]; catName: string; catDesc: string; mainCat: typeof mainCategories[0] | undefined; activeSubSlug: string | null; totalCount: number }> {
-  const supabase = getSupabaseClient();
   const empty = { products: [], catName: "", catDesc: "", mainCat: undefined, activeSubSlug: null, totalCount: 0 };
-  if (!supabase) return empty;
 
   let mainCat = mainCategories.find((c) => c.slug === slug);
   let subCat  = categories.find((c) => c.slug === slug);
@@ -58,29 +56,45 @@ async function getCategoryProducts(
     activeSubSlug = subCat.slug;
   }
 
+  // Category name/description resolve from the static list above, so a page still
+  // renders (with an empty product grid) even if Supabase isn't reachable/configured.
+  const supabase = getSupabaseClient();
+  if (!supabase) return { ...empty, catName, catDesc, mainCat, activeSubSlug };
+
   if (!targetSlugs.length) return { ...empty, catName, catDesc, mainCat, activeSubSlug };
 
-  const { data: cats } = await supabase.from("categories").select("id, slug").in("slug", targetSlugs);
+  const { data: cats, error: catsError } = await supabase.from("categories").select("id, slug").in("slug", targetSlugs);
+  if (catsError) {
+    console.error("[getCategoryProducts] categories query failed:", catsError);
+  }
   const catIds = cats?.map((c) => c.id) ?? [];
   if (!catIds.length) return { ...empty, catName, catDesc, mainCat, activeSubSlug };
 
   const from = (page - 1) * PAGE_SIZE;
-  const { data: prods, count } = await supabase
+  const { data: prods, count, error: prodsError } = await supabase
     .from("products")
     .select("id, title, brand, category_id, slug, created_at", { count: "exact" })
     .in("category_id", catIds)
     .order("created_at", { ascending: false })
     .range(from, from + PAGE_SIZE - 1);
 
+  if (prodsError) {
+    console.error("[getCategoryProducts] products query failed:", prodsError);
+  }
+
   const products = prods ?? [];
   const totalCount = count ?? 0;
   if (!products.length) return { products: [], catName, catDesc, mainCat, activeSubSlug, totalCount };
 
-  const { data: listData } = await supabase
+  const { data: listData, error: listError } = await supabase
     .from("store_listings")
     .select("id, product_id, store_name, raw_title, price, product_url, image_url, updated_at")
     .in("product_id", products.map((p) => p.id))
     .order("price", { ascending: true });
+
+  if (listError) {
+    console.error("[getCategoryProducts] store_listings query failed:", listError);
+  }
 
   const listings = (listData ?? []) as StoreListingRow[];
 

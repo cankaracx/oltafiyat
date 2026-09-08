@@ -17,18 +17,24 @@ async function getProduct(id: string): Promise<ProductDetail | null> {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
 
-  const { data: product } = await supabase
+  const { data: product, error: productError } = await supabase
     .from("products")
     .select("id, title, brand, category_id, slug, created_at")
     .eq("id", numericId)
     .single();
+  if (productError && productError.code !== "PGRST116") {
+    console.error(`[getProduct] product ${numericId} query failed:`, productError);
+  }
   if (!product) return null;
 
-  const { data: rawListings } = await supabase
+  const { data: rawListings, error: listingsError } = await supabase
     .from("store_listings")
     .select("id, product_id, store_name, raw_title, price, product_url, image_url, updated_at")
     .eq("product_id", numericId)
     .order("price", { ascending: true });
+  if (listingsError) {
+    console.error(`[getProduct] store_listings query for product ${numericId} failed:`, listingsError);
+  }
 
   const allListings = (rawListings ?? []) as StoreListingRow[];
 
