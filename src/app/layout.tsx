@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
 import { Search } from "lucide-react";
+import MobileMenu from "@/components/MobileMenu";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
@@ -90,6 +91,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 </Link>
               ))}
             </nav>
+
+            {/* Mobile category menu (nav links above are hidden below lg) */}
+            <MobileMenu />
           </div>
         </header>
 
