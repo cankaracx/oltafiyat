@@ -5,3 +5,6 @@ node_modules
 data/site-data.json
 public/uploads
 npm-debug.log*
+__pycache__/
+*.pyc
+.pytest_cache/
