@@ -562,6 +562,11 @@ def parse_price(raw_price: str) -> float | None:
         number = number.replace(".", "").replace(",", ".")
     elif number.count(".") > 1:
         number = number.replace(".", "")
+    elif "." in number and len(number) - number.rindex(".") - 1 == 3:
+        # A single dot followed by exactly three digits is a Turkish
+        # thousands separator (e.g. "12.500" == 12500), not a decimal
+        # point — Turkish prices only ever use "," for decimals.
+        number = number.replace(".", "")
     try:
         price = round(float(number), 2)
         return price if price > 0 else None
