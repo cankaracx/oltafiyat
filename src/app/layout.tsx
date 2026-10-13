@@ -30,6 +30,7 @@ export const metadata: Metadata = {
 
 const navLinks = [
   { href: "/categories", label: "Kategoriler" },
+  { href: "/magazalar", label: "Mağazalar" },
   { href: "/search?q=lrf", label: "LRF" },
   { href: "/search?q=spin", label: "Spin" },
   { href: "/search?q=surf", label: "Surf" }
@@ -143,9 +144,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 
             <div>
               <h2 className="mb-3 text-sm font-semibold text-[#1c2128]">Hakkında</h2>
-              <div className="text-sm leading-6 text-[#57606a]">
-                <p>Veri hattı: GitHub Actions scraper → Supabase PostgreSQL → Vercel Next.js</p>
-                <p className="mt-2">Fiyatlar yaklaşık 12 saatte bir güncellenir.</p>
+              <div className="grid gap-1.5 text-sm text-[#57606a]">
+                <Link href="/magazalar" className="hover:text-[#0969da] transition-colors">Takip Edilen Mağazalar</Link>
+                <p className="mt-1">Veri hattı: GitHub Actions scraper → Supabase PostgreSQL → Vercel Next.js</p>
+                <p>Fiyatlar yaklaşık 12 saatte bir güncellenir.</p>
               </div>
             </div>
           </div>

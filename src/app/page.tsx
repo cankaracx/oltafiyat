@@ -167,9 +167,14 @@ export default async function HomePage() {
       <section className="container-shell py-10">
         <div className="section-header">
           <h2 className="text-lg font-bold text-[#1c2128]">Kategoriler</h2>
-          <Link href="/categories" className="text-sm font-semibold text-[#0969da] hover:underline">
-            Tümünü gör →
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/magazalar" className="text-sm font-semibold text-[#0969da] hover:underline">
+              Mağazaları gör
+            </Link>
+            <Link href="/categories" className="text-sm font-semibold text-[#0969da] hover:underline">
+              Tümünü gör →
+            </Link>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
           {quickCategories.map((cat) => {
