@@ -53,15 +53,14 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   const product = await getProduct(params.id);
   if (!product) return { title: "Ürün bulunamadı" };
   const lowest = product.listings[0];
-  const image = product.listings.find((l) => l.image_url)?.image_url;
   const description = lowest
     ? `${product.title} — en düşük ${formatTRY(lowest.price)} (${lowest.store_name}). ${product.listings.length} mağaza fiyatını karşılaştırın.`
     : `${product.title} için mağaza fiyatlarını düşükten yükseğe karşılaştırın.`;
   return {
     title: product.title,
     description,
-    openGraph: { title: `${product.title} | OltaFiyat`, description, url: `https://oltafiyat.com/product/${product.id}`, images: image ? [{ url: image, alt: product.title }] : [] },
-    twitter: { card: "summary_large_image", title: `${product.title} | OltaFiyat`, description, images: image ? [image] : [] }
+    openGraph: { title: `${product.title} | OltaFiyat`, description, url: `https://oltafiyat.com/product/${product.id}` },
+    twitter: { card: "summary_large_image", title: `${product.title} | OltaFiyat`, description }
   };
 }
 

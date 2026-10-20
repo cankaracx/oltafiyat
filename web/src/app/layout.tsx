@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     title: defaultTitle,
     description: defaultDescription
   },
-  twitter: { card: "summary", title: defaultTitle, description: defaultDescription }
+  twitter: { card: "summary_large_image", title: defaultTitle, description: defaultDescription }
 };
 
 const navLinks = [
