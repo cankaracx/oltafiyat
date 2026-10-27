@@ -173,6 +173,21 @@ a { text-decoration: none; }
 /* Divider */
 .divider { border: none; border-top: 1px solid var(--border-subtle); margin: 0; }
 
+/* Loading skeletons — shaped to match the real content they stand in for, not decorative */
+.skeleton {
+  background: linear-gradient(100deg, var(--border-subtle) 30%, #f1f4f7 50%, var(--border-subtle) 70%);
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.6s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+@keyframes skeleton-sweep {
+  0% { background-position: 150% 0; }
+  100% { background-position: -50% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; background: var(--border-subtle); }
+}
+
 /* Keep gh- aliases for backward compat (pages already use them) */
 .gh-panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
 .gh-button { display:inline-flex; min-height:36px; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg); color:var(--text); padding:6px 14px; font-size:14px; font-weight:600; cursor:pointer; transition:background 0.12s; }
