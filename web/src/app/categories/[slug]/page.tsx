@@ -6,14 +6,26 @@ import { ChevronLeft } from "lucide-react";
 import { mainCategories, categories } from "@/lib/categories";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient, type ProductRow, type StoreListingRow } from "@/lib/supabase";
+import {
+  buildBrandFacets,
+  filterByBrands,
+  filterByPriceRange,
+  parseBrandsParam,
+  parsePriceParam
+} from "@/lib/filters";
 
 export const revalidate = 43200;
 
 const PAGE_SIZE = 24;
+// A single sub-category tops out well under this even at full 23-store scraper capacity.
+// Fetching the whole set (instead of a DB-side page) is what lets price/brand filtering and
+// price sorting apply across the full category rather than just whichever 24 rows landed on
+// the current page.
+const MAX_CATEGORY_PRODUCTS = 1000;
 
 type CategoryPageProps = {
   params: { slug: string };
-  searchParams: { sub?: string; sort?: string; page?: string };
+  searchParams: { sub?: string; sort?: string; page?: string; brand?: string; min?: string; max?: string };
 };
 
 type ProductWithLowest = ProductRow & {
@@ -30,11 +42,14 @@ export function generateMetadata({ params }: CategoryPageProps): Metadata {
   return { title: cat.name, description: cat.description };
 }
 
+// Fetches every product in the (sub-)category, unsorted and unfiltered by brand/price — the
+// page component applies sort, price/brand filters, and pagination afterwards so they work
+// against the whole category instead of just one page's worth of rows.
 async function getCategoryProducts(
-  slug: string, subSlug?: string, sort = "newest", page = 1
-): Promise<{ products: ProductWithLowest[]; catName: string; catDesc: string; mainCat: typeof mainCategories[0] | undefined; activeSubSlug: string | null; totalCount: number }> {
+  slug: string, subSlug?: string
+): Promise<{ products: ProductWithLowest[]; catName: string; catDesc: string; mainCat: typeof mainCategories[0] | undefined; activeSubSlug: string | null }> {
   const supabase = getSupabaseClient();
-  const empty = { products: [], catName: "", catDesc: "", mainCat: undefined, activeSubSlug: null, totalCount: 0 };
+  const empty = { products: [], catName: "", catDesc: "", mainCat: undefined, activeSubSlug: null };
   if (!supabase) return empty;
 
   let mainCat = mainCategories.find((c) => c.slug === slug);
@@ -64,17 +79,15 @@ async function getCategoryProducts(
   const catIds = cats?.map((c) => c.id) ?? [];
   if (!catIds.length) return { ...empty, catName, catDesc, mainCat, activeSubSlug };
 
-  const from = (page - 1) * PAGE_SIZE;
-  const { data: prods, count } = await supabase
+  const { data: prods } = await supabase
     .from("products")
-    .select("id, title, brand, category_id, slug, created_at", { count: "exact" })
+    .select("id, title, brand, category_id, slug, created_at")
     .in("category_id", catIds)
     .order("created_at", { ascending: false })
-    .range(from, from + PAGE_SIZE - 1);
+    .limit(MAX_CATEGORY_PRODUCTS);
 
   const products = prods ?? [];
-  const totalCount = count ?? 0;
-  if (!products.length) return { products: [], catName, catDesc, mainCat, activeSubSlug, totalCount };
+  if (!products.length) return { products: [], catName, catDesc, mainCat, activeSubSlug };
 
   const { data: listData } = await supabase
     .from("store_listings")
@@ -84,7 +97,7 @@ async function getCategoryProducts(
 
   const listings = (listData ?? []) as StoreListingRow[];
 
-  let merged: ProductWithLowest[] = products.map((p) => {
+  const merged: ProductWithLowest[] = products.map((p) => {
     const pl = listings.filter((l) => l.product_id === p.id);
     return {
       ...p,
@@ -94,10 +107,15 @@ async function getCategoryProducts(
     };
   });
 
-  if (sort === "price_asc") merged.sort((a, b) => (a.lowestPrice ?? Infinity) - (b.lowestPrice ?? Infinity));
-  else if (sort === "price_desc") merged.sort((a, b) => (b.lowestPrice ?? -Infinity) - (a.lowestPrice ?? -Infinity));
+  return { products: merged, catName, catDesc, mainCat, activeSubSlug };
+}
 
-  return { products: merged, catName, catDesc, mainCat, activeSubSlug, totalCount };
+function sortCategoryProducts(products: ProductWithLowest[], sort: string): ProductWithLowest[] {
+  const copy = [...products];
+  if (sort === "price_asc") copy.sort((a, b) => (a.lowestPrice ?? Infinity) - (b.lowestPrice ?? Infinity));
+  else if (sort === "price_desc") copy.sort((a, b) => (b.lowestPrice ?? -Infinity) - (a.lowestPrice ?? -Infinity));
+  else copy.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return copy;
 }
 
 const SORT_OPTIONS = [
@@ -111,17 +129,54 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
   const sub  = searchParams.sub;
   const sort = searchParams.sort || "newest";
   const page = Math.max(1, Number(searchParams.page) || 1);
+  const minPrice = parsePriceParam(searchParams.min);
+  const maxPrice = parsePriceParam(searchParams.max);
+  const selectedBrands = parseBrandsParam(searchParams.brand);
 
-  const { products, catName, catDesc, mainCat, activeSubSlug, totalCount } =
-    await getCategoryProducts(slug, sub, sort, page);
+  const { products: allProducts, catName, catDesc, mainCat, activeSubSlug } =
+    await getCategoryProducts(slug, sub);
 
   if (!mainCat) notFound();
 
-  const subCats   = categories.filter((c) => c.parentSlug === mainCat.slug);
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const priceFiltered = filterByPriceRange(allProducts, { min: minPrice, max: maxPrice });
+  const brandFacets = buildBrandFacets(priceFiltered);
+  const filtered = filterByBrands(priceFiltered, selectedBrands);
+  const products = sortCategoryProducts(filtered, sort);
 
-  const pageQ = (extra = "") =>
-    `/categories/${slug}?${sub ? `sub=${sub}&` : ""}sort=${sort}${extra}`;
+  const subCats   = categories.filter((c) => c.parentSlug === mainCat.slug);
+  const totalCount = products.length;
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const pagedProducts = products.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const hasActiveFilters = selectedBrands.length > 0 || minPrice !== undefined || maxPrice !== undefined;
+
+  // Builds a /categories/[slug] URL carrying every active filter plus this link's overrides.
+  const buildHref = (overrides: Partial<Record<"sub" | "sort" | "brand" | "min" | "max" | "page", string>>) => {
+    const next = {
+      sub: sub ?? "",
+      sort,
+      brand: selectedBrands.join(","),
+      min: minPrice !== undefined ? String(minPrice) : "",
+      max: maxPrice !== undefined ? String(maxPrice) : "",
+      page: "",
+      ...overrides
+    };
+    const params = new URLSearchParams();
+    if (next.sub) params.set("sub", next.sub);
+    if (next.sort && next.sort !== "newest") params.set("sort", next.sort);
+    if (next.brand) params.set("brand", next.brand);
+    if (next.min) params.set("min", next.min);
+    if (next.max) params.set("max", next.max);
+    if (next.page) params.set("page", next.page);
+    const qs = params.toString();
+    return `/categories/${slug}${qs ? `?${qs}` : ""}`;
+  };
+
+  const toggleBrandHref = (brand: string) => {
+    const next = selectedBrands.includes(brand)
+      ? selectedBrands.filter((b) => b !== brand)
+      : [...selectedBrands, brand];
+    return buildHref({ brand: next.join(",") });
+  };
 
   return (
     <section className="container-shell py-8">
@@ -142,7 +197,7 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
       {subCats.length > 0 && (
         <div className="mb-5 flex flex-wrap gap-2">
           <Link
-            href={`/categories/${mainCat.slug}?sort=${sort}`}
+            href={buildHref({ sub: "" })}
             className={`btn btn-sm ${!activeSubSlug ? "btn-blue" : ""}`}
           >
             Tümü
@@ -150,12 +205,69 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
           {subCats.map((s) => (
             <Link
               key={s.slug}
-              href={`/categories/${mainCat.slug}?sub=${s.slug}&sort=${sort}`}
+              href={buildHref({ sub: s.slug })}
               className={`btn btn-sm ${activeSubSlug === s.slug ? "btn-blue" : ""}`}
             >
               {s.name}
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* Brand + price filters */}
+      {allProducts.length > 0 && (
+        <div className="panel p-4 mb-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            {brandFacets.length > 0 && (
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#57606a] mb-2">Marka</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {brandFacets.map(({ brand, count }) => {
+                    const active = selectedBrands.includes(brand);
+                    return (
+                      <Link
+                        key={brand}
+                        href={toggleBrandHref(brand)}
+                        aria-pressed={active}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                          active
+                            ? "border-[#0969da] bg-[#ddf4ff] text-[#0550ae]"
+                            : "border-[#d0d7de] bg-[#f6f8fa] text-[#57606a] hover:border-[#0969da]/50 hover:text-[#1c2128]"
+                        }`}
+                      >
+                        {brand}
+                        <span className={active ? "text-[#0550ae]/70" : "text-[#8b949e]"}>{count}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <form action={`/categories/${slug}`} className="flex items-end gap-2 shrink-0">
+              {sub && <input type="hidden" name="sub" value={sub} />}
+              {sort !== "newest" && <input type="hidden" name="sort" value={sort} />}
+              {selectedBrands.length > 0 && <input type="hidden" name="brand" value={selectedBrands.join(",")} />}
+              <div>
+                <label htmlFor="min-price" className="block text-[10px] font-bold uppercase tracking-widest text-[#57606a] mb-2">En az ₺</label>
+                <input
+                  id="min-price" name="min" type="number" min={0} inputMode="decimal"
+                  defaultValue={minPrice ?? ""} placeholder="0" className="input w-24 text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="max-price" className="block text-[10px] font-bold uppercase tracking-widest text-[#57606a] mb-2">En çok ₺</label>
+                <input
+                  id="max-price" name="max" type="number" min={0} inputMode="decimal"
+                  defaultValue={maxPrice ?? ""} placeholder="∞" className="input w-24 text-sm"
+                />
+              </div>
+              <button type="submit" className="btn btn-sm">Uygula</button>
+              {hasActiveFilters && (
+                <Link href={buildHref({ brand: "", min: "", max: "" })} className="btn btn-sm">Temizle</Link>
+              )}
+            </form>
+          </div>
         </div>
       )}
 
@@ -171,7 +283,7 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
             {SORT_OPTIONS.map((opt) => (
               <Link
                 key={opt.value}
-                href={`/categories/${slug}?${sub ? `sub=${sub}&` : ""}sort=${opt.value}`}
+                href={buildHref({ sort: opt.value, page: "" })}
                 className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${
                   sort === opt.value
                     ? "bg-white text-[#1c2128] shadow-sm border border-[#d0d7de]"
@@ -186,9 +298,9 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
       </div>
 
       {/* Product grid */}
-      {products.length > 0 ? (
+      {pagedProducts.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {products.map((product) => (
+          {pagedProducts.map((product) => (
             <Link
               key={product.id}
               href={`/product/${product.id}`}
@@ -238,8 +350,19 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
       ) : (
         <div className="panel border-dashed p-12 text-center">
           <p className="text-4xl mb-4 opacity-30">📦</p>
-          <h2 className="text-lg font-bold text-[#1c2128]">Bu kategoride henüz ürün yok</h2>
-          <p className="mt-2 text-sm text-[#57606a]">Scraper yeni veriler topladığında otomatik görünecektir.</p>
+          <h2 className="text-lg font-bold text-[#1c2128]">
+            {hasActiveFilters ? "Filtrelere uyan ürün yok" : "Bu kategoride henüz ürün yok"}
+          </h2>
+          <p className="mt-2 text-sm text-[#57606a]">
+            {hasActiveFilters
+              ? "Marka veya fiyat aralığını genişletmeyi dene."
+              : "Scraper yeni veriler topladığında otomatik görünecektir."}
+          </p>
+          {hasActiveFilters && (
+            <Link href={buildHref({ brand: "", min: "", max: "" })} className="btn mt-4">
+              Filtreleri temizle
+            </Link>
+          )}
         </div>
       )}
 
@@ -247,13 +370,13 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
       {totalPages > 1 && (
         <nav aria-label="Sayfalama" className="mt-8 flex items-center justify-center gap-2">
           {page > 1 && (
-            <Link href={pageQ(`&page=${page - 1}`)} className="btn">← Önceki</Link>
+            <Link href={buildHref({ page: String(page - 1) })} className="btn">← Önceki</Link>
           )}
           <span className="px-4 py-2 text-sm text-[#57606a]">
             Sayfa {page} / {totalPages}
           </span>
           {page < totalPages && (
-            <Link href={pageQ(`&page=${page + 1}`)} className="btn">Sonraki →</Link>
+            <Link href={buildHref({ page: String(page + 1) })} className="btn">Sonraki →</Link>
           )}
         </nav>
       )}
