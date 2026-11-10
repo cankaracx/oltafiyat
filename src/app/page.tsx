@@ -4,6 +4,7 @@ import Image from "next/image";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient } from "@/lib/supabase";
 import { mainCategories, categoryIconMap } from "@/lib/categories";
+import SearchAutocomplete from "@/components/SearchAutocomplete";
 
 export const revalidate = 3600;
 
@@ -73,7 +74,7 @@ async function getHomepageData(): Promise<{ featured: FeaturedProduct[]; stats: 
     listingsByProduct.get(l.product_id)!.push(l);
   }
 
-  const ranked = [...listingsByProduct.entries()]
+  const ranked = Array.from(listingsByProduct.entries())
     .filter(([, ls]) => ls.length >= 2)
     .sort((a, b) => b[1].length - a[1].length)
     .slice(0, 6);
@@ -129,19 +130,15 @@ export default async function HomePage() {
               toplar, karşılaştırır ve en ucuz teklifi gösterir.
             </p>
 
-            <form action="/search" className="mt-8 flex gap-2 max-w-lg mx-auto">
-              <label htmlFor="hero-search" className="sr-only">Ürün ara</label>
-              <input
-                id="hero-search"
-                name="q"
-                type="search"
-                placeholder="Ürün, marka veya model ara…"
-                className="input flex-1 text-[15px] py-3"
-              />
-              <button type="submit" className="btn btn-primary px-6 py-3 text-[15px]">
-                Ara
-              </button>
-            </form>
+            <SearchAutocomplete
+              inputId="hero-search"
+              placeholder="Ürün, marka veya model ara…"
+              containerClassName="relative mt-8 max-w-lg mx-auto"
+              formClassName="flex gap-2"
+              inputClassName="input flex-1 text-[15px] py-3"
+              buttonClassName="btn btn-primary px-6 py-3 text-[15px]"
+              buttonLabel="Ara"
+            />
           </div>
 
           {/* Stats */}

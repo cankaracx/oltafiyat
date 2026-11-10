@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient, type ProductRow, type StoreListingRow } from "@/lib/supabase";
+import SearchAutocomplete from "@/components/SearchAutocomplete";
 
 export const revalidate = 3600;
 
@@ -125,20 +126,16 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
       {/* Search bar */}
       <div className="panel p-5 mb-6">
-        <form action="/search" className="flex flex-col gap-3 sm:flex-row">
-          <label htmlFor="search-q" className="sr-only">Ürün ara</label>
-          <input
-            id="search-q"
-            name="q"
-            type="search"
-            defaultValue={query}
-            placeholder="Ürün, marka veya model ara…"
-            className="input flex-1 text-[15px]"
-            autoComplete="off"
-          />
-          {sort && sort !== "relevance" && <input type="hidden" name="sort" value={sort} />}
-          <button type="submit" className="btn btn-primary px-7">Ara</button>
-        </form>
+        <SearchAutocomplete
+          inputId="search-q"
+          placeholder="Ürün, marka veya model ara…"
+          defaultValue={query}
+          formClassName="flex flex-col gap-3 sm:flex-row"
+          inputClassName="input flex-1 text-[15px]"
+          buttonClassName="btn btn-primary px-7"
+          buttonLabel="Ara"
+          extraFields={sort && sort !== "relevance" ? <input type="hidden" name="sort" value={sort} /> : null}
+        />
       </div>
 
       {!supabaseReady && (
