@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import SearchAutocomplete from "@/components/SearchAutocomplete";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
@@ -57,26 +57,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </Link>
 
             {/* Search bar */}
-            <form
-              action="/search"
-              className="flex flex-1 items-center rounded-md border border-[#30363d] bg-[#0d1117] focus-within:border-[#58a6ff] focus-within:ring-1 focus-within:ring-[#58a6ff]/40 transition-all"
-            >
-              <label htmlFor="header-search" className="sr-only">Ürün ara</label>
-              <Search size={14} className="ml-3 text-[#8b949e] shrink-0" aria-hidden />
-              <input
-                id="header-search"
-                name="q"
-                type="search"
-                placeholder="Ürün, marka veya kategori ara..."
-                className="flex-1 bg-transparent px-2.5 py-2 text-sm text-white placeholder:text-[#8b949e] outline-none"
-              />
-              <button
-                type="submit"
-                className="mr-1 rounded px-2.5 py-1 text-xs font-semibold text-[#8b949e] hover:bg-white/10 hover:text-white transition-colors"
-              >
-                Ara
-              </button>
-            </form>
+            <SearchAutocomplete
+              inputId="header-search"
+              placeholder="Ürün, marka veya kategori ara..."
+              containerClassName="relative flex-1"
+              formClassName="flex items-center rounded-md border border-[#30363d] bg-[#0d1117] focus-within:border-[#58a6ff] focus-within:ring-1 focus-within:ring-[#58a6ff]/40 transition-all"
+              inputClassName="flex-1 bg-transparent px-2.5 py-2 text-sm text-white placeholder:text-[#8b949e] outline-none"
+              buttonClassName="mr-1 rounded px-2.5 py-1 text-xs font-semibold text-[#8b949e] hover:bg-white/10 hover:text-white transition-colors"
+              buttonLabel="Ara"
+              showIcon
+              iconClassName="ml-3 text-[#8b949e] shrink-0"
+            />
 
             {/* Nav links */}
             <nav className="hidden lg:flex items-center gap-0.5 shrink-0" aria-label="Ana menü">
