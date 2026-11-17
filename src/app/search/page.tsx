@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient, type ProductRow, type StoreListingRow } from "@/lib/supabase";
+import { isCatalogEmpty } from "@/lib/catalog-status";
 
 export const revalidate = 3600;
 
@@ -119,6 +120,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const results = all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const supabaseReady = Boolean(getSupabaseClient());
+  const catalogEmpty = query && total === 0 ? await isCatalogEmpty() : false;
 
   return (
     <section className="container-shell py-8">
@@ -234,7 +236,19 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       )}
 
       {/* Empty state */}
-      {query && total === 0 && (
+      {query && total === 0 && catalogEmpty && (
+        <div className="panel border-dashed p-12 text-center">
+          <p className="text-4xl mb-4 opacity-30">📡</p>
+          <h2 className="text-lg font-bold text-[#1c2128]">Katalog henüz dolmadı</h2>
+          <p className="mt-2 text-sm text-[#57606a] max-w-sm mx-auto">
+            &ldquo;{query}&rdquo; için değil, hiçbir ürün için sonuç yok — veri hattı mağazaları
+            yeniden taramaya başladığında arama otomatik olarak çalışacak. Bu aramanın kendisiyle
+            ilgili bir sorun yok.
+          </p>
+        </div>
+      )}
+
+      {query && total === 0 && !catalogEmpty && (
         <div className="panel border-dashed p-12 text-center">
           <p className="text-4xl mb-4 opacity-30">🔍</p>
           <h2 className="text-lg font-bold text-[#1c2128]">Sonuç bulunamadı</h2>

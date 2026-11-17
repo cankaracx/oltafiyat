@@ -6,6 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import { mainCategories, categories } from "@/lib/categories";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient, type ProductRow, type StoreListingRow } from "@/lib/supabase";
+import { isCatalogEmpty } from "@/lib/catalog-status";
 
 export const revalidate = 43200;
 
@@ -116,6 +117,8 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
     await getCategoryProducts(slug, sub, sort, page);
 
   if (!mainCat) notFound();
+
+  const catalogEmpty = totalCount === 0 ? await isCatalogEmpty() : false;
 
   const subCats   = categories.filter((c) => c.parentSlug === mainCat.slug);
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
@@ -234,6 +237,15 @@ export default async function CategoryDetailPage({ params, searchParams }: Categ
               </div>
             </Link>
           ))}
+        </div>
+      ) : catalogEmpty ? (
+        <div className="panel border-dashed p-12 text-center">
+          <p className="text-4xl mb-4 opacity-30">📡</p>
+          <h2 className="text-lg font-bold text-[#1c2128]">Katalog henüz dolmadı</h2>
+          <p className="mt-2 text-sm text-[#57606a] max-w-sm mx-auto">
+            Sadece bu kategoride değil, sitenin genelinde henüz ürün yok — veri hattı mağazaları
+            yeniden taramaya başladığında bu kategori de otomatik olarak dolacak.
+          </p>
         </div>
       ) : (
         <div className="panel border-dashed p-12 text-center">

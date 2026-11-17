@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { TRACKED_STORE_COUNT } from "@/lib/store-coverage";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
@@ -10,7 +11,7 @@ const isProduction = process.env.VERCEL_ENV === "production";
 
 const defaultTitle = "OltaFiyat | Türkiye Balık Avı Fiyat Karşılaştırma";
 const defaultDescription =
-  "Türkiye'deki 16+ balık avı mağazasında kamış, makine, sahte yem, misina ve aksesuar fiyatlarını karşılaştırın.";
+  `Türkiye'deki ${TRACKED_STORE_COUNT} balık avı mağazasında kamış, makine, sahte yem, misina ve aksesuar fiyatlarını karşılaştırın.`;
 
 export const metadata: Metadata = {
   title: { default: defaultTitle, template: "%s | OltaFiyat" },
