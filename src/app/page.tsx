@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { Radar, GitMerge, TrendingDown } from "lucide-react";
 import { formatTRY } from "@/lib/format";
 import { getSupabaseClient } from "@/lib/supabase";
 import { mainCategories, categoryIconMap } from "@/lib/categories";
+import { TRACKED_STORE_COUNT, SAMPLE_TRACKED_STORES } from "@/lib/store-coverage";
 
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "OltaFiyat | Türkiye Balık Avı Fiyat Karşılaştırma",
-  description:
-    "Kamış, makine, sahte yem, misina ve aksesuar fiyatlarını 16+ Türk balıkçılık mağazasında karşılaştırın.",
+  description: `Kamış, makine, sahte yem, misina ve aksesuar fiyatlarını ${TRACKED_STORE_COUNT} Türk balıkçılık mağazasında karşılaştırın.`,
   openGraph: {
     title: "OltaFiyat | Türkiye Balık Avı Fiyat Karşılaştırma",
-    description:
-      "Kamış, makine, sahte yem, misina ve aksesuar fiyatlarını 16+ Türk balıkçılık mağazasında karşılaştırın.",
+    description: `Kamış, makine, sahte yem, misina ve aksesuar fiyatlarını ${TRACKED_STORE_COUNT} Türk balıkçılık mağazasında karşılaştırın.`,
     url: "https://oltafiyat.com"
   }
 };
@@ -125,7 +125,7 @@ export default async function HomePage() {
               En düşük balıkçılık fiyatlarını<br className="hidden sm:block" /> tek panelde bul.
             </h1>
             <p className="mt-5 text-base leading-7 text-[#57606a] max-w-xl mx-auto">
-              OltaFiyat; kamış, makine, sahte yem, misina ve aksesuar fiyatlarını 16+ Türk mağazasından
+              OltaFiyat; kamış, makine, sahte yem, misina ve aksesuar fiyatlarını {TRACKED_STORE_COUNT} Türk mağazasından
               toplar, karşılaştırır ve en ucuz teklifi gösterir.
             </p>
 
@@ -145,7 +145,7 @@ export default async function HomePage() {
           </div>
 
           {/* Stats */}
-          {stats.productCount > 0 && (
+          {stats.productCount > 0 ? (
             <div className="mt-10 flex flex-wrap justify-center gap-6">
               {[
                 { value: stats.productCount.toLocaleString("tr-TR"), label: "Ürün" },
@@ -158,6 +158,13 @@ export default async function HomePage() {
                   <div className="mt-0.5 text-xs text-[#57606a] font-medium uppercase tracking-wider">{s.label}</div>
                 </div>
               ))}
+            </div>
+          ) : (
+            <div className="mt-8 flex justify-center">
+              <span className="badge badge-blue inline-flex items-center gap-1.5 px-3 py-1.5">
+                <Radar size={13} />
+                Katalog oluşturuluyor — {TRACKED_STORE_COUNT} mağaza taranıyor
+              </span>
             </div>
           )}
         </div>
@@ -189,6 +196,48 @@ export default async function HomePage() {
           })}
         </div>
       </section>
+
+      {/* ── CATALOG BUILDING (shown only while the scraper hasn't written any rows yet) ── */}
+      {featured.length === 0 && (
+        <section className="container-shell pb-14">
+          <div className="panel p-6 sm:p-8">
+            <span className="badge-label mb-3 inline-block">Veri Hattı Durumu</span>
+            <h2 className="text-lg font-bold text-[#1c2128]">Katalog şu anda oluşturuluyor</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#57606a]">
+              Henüz listelenecek fiyat kaydı yok — bu bir hata değil, OltaFiyat&apos;ın veri hattı
+              {" "}{TRACKED_STORE_COUNT} mağazayı taramayı ve fiyatları veritabanına yazmayı yeni
+              senkronize ediyor. İlk ürünler yazıldığı anda burada ve kategori sayfalarında
+              otomatik olarak görünecek.
+            </p>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              {[
+                { icon: Radar, title: "Mağazaları tara", desc: `${TRACKED_STORE_COUNT} mağaza sitesi her 12 saatte bir otomatik olarak taranır.` },
+                { icon: GitMerge, title: "Aynı ürünü eşleştir", desc: "Farklı mağazalardaki aynı ürün tek bir kayıt altında birleştirilir." },
+                { icon: TrendingDown, title: "En ucuzu öne çıkar", desc: "Birleşen kayıttaki en düşük fiyat ve mağaza direkt gösterilir." }
+              ].map((step) => (
+                <div key={step.title} className="panel-flat p-4">
+                  <step.icon size={16} className="text-[#0969da]" aria-hidden />
+                  <h3 className="mt-2.5 text-sm font-semibold text-[#1c2128]">{step.title}</h3>
+                  <p className="mt-1 text-xs leading-5 text-[#57606a]">{step.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 border-t border-[#e8ecf0] pt-5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#57606a] mb-2.5">
+                Taranan mağazalardan bazıları
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {SAMPLE_TRACKED_STORES.map((name) => (
+                  <span key={name} className="badge">{name}</span>
+                ))}
+                <span className="badge">+{TRACKED_STORE_COUNT - SAMPLE_TRACKED_STORES.length} diğer</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── FEATURED ── */}
       {featured.length > 0 && (
